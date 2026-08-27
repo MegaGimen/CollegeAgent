@@ -1,0 +1,13 @@
+node_modules/
+vault/
+banlist.json
+*.zip
+package-lock.json
+.DS_Store
+
+# AutoRAG generated data
+autorag/data/
+autorag/__pycache__/
+__pycache__/
+*.pyc
+MCP/assets

@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎓 bCourses Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0d0f14;
+      --bg-secondary: #151820;
+      --bg-card: #1c2030;
+      --bg-card-hover: #232840;
+      --border: rgba(255,255,255,0.08);
+      --border-accent: rgba(99,102,241,0.4);
+      --text-main: #e8eaf0;
+      --text-muted: #7b82a0;
+      --text-dim: #4a5270;
+      --accent: #6366f1;
+      --accent-2: #8b5cf6;
+      --accent-3: #06b6d4;
+      --accent-green: #10b981;
+      --accent-yellow: #f59e0b;
+      --accent-red: #ef4444;
+      --accent-pink: #ec4899;
+      --gradient-header: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+      --gradient-card: linear-gradient(145deg, rgba(99,102,241,0.1) 0%, rgba(139,92,246,0.05) 100%);
+      --shadow: 0 4px 24px rgba(0,0,0,0.4);
+      --shadow-glow: 0 0 40px rgba(99,102,241,0.15);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background orbs */
+    .bg-orbs {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .bg-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.12;
+      animation: floatOrb 20s ease-in-out infinite;
+    }
+    .bg-orb:nth-child(1) { width: 600px; height: 600px; background: #6366f1; top: -200px; left: -200px; animation-delay: 0s; }
+    .bg-orb:nth-child(2) { width: 500px; height: 500px; background: #8b5cf6; bottom: -150px; right: -150px; animation-delay: 7s; }
+    .bg-orb:nth-child(3) { width: 400px; height: 400px; background: #06b6d4; top: 40%; left: 40%; animation-delay: 14s; }
+
+    @keyframes floatOrb {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -30px) scale(1.05); }
+      66% { transform: translate(-20px, 20px) scale(0.95); }
+    }
+
+    /* App layout */
+    .app {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: rgba(21, 24, 32, 0.95);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      backdrop-filter: blur(20px);
+    }
+
+    .sidebar-header {
+      padding: 28px 20px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 4px;
+    }
+
+    .logo-icon {
+      width: 38px;
+      height: 38px;
+      background: var(--gradient-header);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(99,102,241,0.4);
+    }
+
+    .logo-text {
+      font-size: 1.1rem;
+      font-weight: 700;
+      background: var(--gradient-header);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .logo-sub {
+      font-size: 0.72rem;
+      color: var(--text-dim);
+      margin-left: 50px;
+      margin-top: -2px;
+    }
+
+    /* User card in sidebar */
+    .user-card {
+      margin: 16px;
+      padding: 14px;
+      background: var(--gradient-card);
+      border: 1px solid var(--border-accent);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .user-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+
+    .user-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--gradient-header);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 8px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .user-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .user-email {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Nav items */
+    .nav-section-title {
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding: 14px 20px 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+      border-radius: 0;
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      border-left: 3px solid transparent;
+      position: relative;
+    }
+
+    .nav-item:hover {
+      background: rgba(99,102,241,0.08);
+      color: var(--text-main);
+    }
+
+    .nav-item.active {
+      background: rgba(99,102,241,0.12);
+      color: var(--accent);
+      border-left-color: var(--accent);
+      font-weight: 500;
+    }
+
+    .nav-item .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+    .nav-badge {
+      margin-left: auto;
+      background: var(--accent);
+      color: white;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 20px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* Page header */
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .page-title {
+      font-size: 1.75rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      background: var(--gradient-header);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .page-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Stats row */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 16px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--gradient-header);
+    }
+
+    .stat-card:hover {
+      border-color: var(--border-accent);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-glow);
+    }
+
+    .stat-icon { font-size: 22px; margin-bottom: 10px; }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      background: var(--gradient-header);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+
+    .card:hover { border-color: var(--border-accent); }
+
+    .card-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .card-title {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-body { padding: 0; }
+
+    .card-action-btn {
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.3);
+      color: var(--accent);
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .card-action-btn:hover { background: rgba(99,102,241,0.25); }
+
+    /* Course cards */
+    .courses-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 18px;
+    }
+
+    .course-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+    }
+
+    .course-card:hover {
+      border-color: var(--border-accent);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 20px rgba(99,102,241,0.1);
+    }
+
+    .course-banner {
+      height: 6px;
+      background: var(--gradient-header);
+    }
+
+    .course-card:nth-child(2) .course-banner { background: linear-gradient(135deg, #06b6d4, #10b981); }
+    .course-card:nth-child(3) .course-banner { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+    .course-card:nth-child(4) .course-banner { background: linear-gradient(135deg, #ec4899, #8b5cf6); }
+
+    .course-body { padding: 20px; }
+
+    .course-code {
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(99,102,241,0.1);
+      padding: 3px 10px;
+      border-radius: 20px;
+      display: inline-block;
+      margin-bottom: 10px;
+    }
+
+    .course-name {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-main);
+      line-height: 1.4;
+      margin-bottom: 12px;
+    }
+
+    .course-meta {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .course-meta-item {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .course-grade {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .grade-label { font-size: 0.75rem; color: var(--text-muted); }
+    .grade-value {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+
+    /* Table styles */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th {
+      text-align: left;
+      padding: 12px 20px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+
+    .data-table td {
+      padding: 14px 20px;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      vertical-align: middle;
+    }
+
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(99,102,241,0.04); }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge-blue { background: rgba(99,102,241,0.15); color: #818cf8; }
+    .badge-green { background: rgba(16,185,129,0.15); color: #34d399; }
+    .badge-yellow { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .badge-red { background: rgba(239,68,68,0.15); color: #f87171; }
+    .badge-gray { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-card) 25%, var(--bg-card-hover) 50%, var(--bg-card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 8px;
+    }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .skeleton-line { height: 14px; margin-bottom: 8px; }
+    .skeleton-line.short { width: 50%; }
+    .skeleton-line.medium { width: 75%; }
+
+    /* Loading overlay */
+    .loading-bar {
+      position: fixed;
+      top: 0; left: 0;
+      width: 0%;
+      height: 3px;
+      background: var(--gradient-header);
+      z-index: 9999;
+      transition: width 0.3s ease;
+    }
+    .loading-bar.active { width: 70%; }
+    .loading-bar.done { width: 100%; opacity: 0; transition: width 0.2s, opacity 0.3s 0.2s; }
+
+    /* Section panels (hidden by default) */
+    .panel { display: none; flex-direction: column; gap: 24px; }
+    .panel.active { display: flex; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-secondary);
+      padding: 4px;
+      border-radius: 12px;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      padding: 7px 18px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text-main); }
+    .tab.active {
+      background: var(--bg-card);
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    /* Assignment list item */
+    .assignment-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 20px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    .assignment-item:last-child { border-bottom: none; }
+    .assignment-item:hover { background: rgba(99,102,241,0.04); }
+
+    .assignment-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .assignment-name { flex: 1; font-size: 0.88rem; font-weight: 500; }
+    .assignment-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+    .assignment-points { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+
+    /* Activity feed */
+    .activity-item {
+      display: flex;
+      gap: 14px;
+      padding: 16px 22px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-item:hover { background: rgba(99,102,241,0.04); }
+
+    .activity-icon-wrap {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .activity-content { flex: 1; min-width: 0; }
+    .activity-title { font-size: 0.88rem; font-weight: 500; line-height: 1.4; }
+    .activity-body { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+    .activity-time { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+
+    /* Profile section */
+    .profile-hero {
+      background: var(--gradient-card);
+      border: 1px solid var(--border-accent);
+      border-radius: 20px;
+      padding: 32px;
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .profile-avatar-big {
+      width: 90px; height: 90px;
+      border-radius: 50%;
+      background: var(--gradient-header);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 800;
+      color: white;
+      flex-shrink: 0;
+      box-shadow: 0 8px 24px rgba(99,102,241,0.4);
+    }
+
+    .profile-info { flex: 1; }
+    .profile-name { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; }
+    .profile-id { font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; font-family: 'JetBrains Mono', monospace; }
+
+    .profile-fields {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+
+    .profile-field {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .profile-field-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); font-weight: 600; margin-bottom: 6px; }
+    .profile-field-value { font-size: 0.88rem; color: var(--text-main); word-break: break-all; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-dim);
+    }
+    .empty-state .empty-icon { font-size: 48px; margin-bottom: 14px; }
+    .empty-state .empty-title { font-size: 1rem; font-weight: 600; color: var(--text-muted); }
+    .empty-state .empty-sub { font-size: 0.82rem; margin-top: 6px; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+    /* Refresh button */
+    .refresh-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .refresh-btn.spinning .refresh-icon { animation: spin 0.8s linear infinite; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 24px; right: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-accent);
+      border-radius: 12px;
+      padding: 12px 18px;
+      font-size: 0.85rem;
+      color: var(--text-main);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.3s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="loading-bar" id="loadingBar"></div>
+<div class="toast" id="toast">✓ Data refreshed</div>
+
+<div class="bg-orbs">
+  <div class="bg-orb"></div>
+  <div class="bg-orb"></div>
+  <div class="bg-orb"></div>
+</div>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <div class="logo-icon">🎓</div>
+        <div class="logo-text">bCourses</div>
+      </div>
+      <div class="logo-sub">UC Berkeley Canvas Dashboard</div>
+    </div>
+
+    <div class="user-card" onclick="showPanel('profile')">
+      <div class="user-avatar" id="sidebarInitials">IS</div>
+      <div class="user-name" id="sidebarName">Immanuel Sun</div>
+      <div class="user-email" id="sidebarEmail">student@berkeley.edu</div>
+    </div>
+
+    <div class="nav-section-title">Main</div>
+    <div class="nav-item active" onclick="showPanel('dashboard')" data-panel="dashboard">
+      <span class="nav-icon">🏠</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showPanel('courses')" data-panel="courses">
+      <span class="nav-icon">📚</span> My Courses
+    </div>
+    <div class="nav-item" onclick="showPanel('assignments')" data-panel="assignments">
+      <span class="nav-icon">📝</span> Assignments
+    </div>
+    <div class="nav-item" onclick="showPanel('grades')" data-panel="grades">
+      <span class="nav-icon">📊</span> Grades
+    </div>
+
+    <div class="nav-section-title">Learning</div>
+    <div class="nav-item" onclick="showPanel('modules')" data-panel="modules">
+      <span class="nav-icon">📦</span> Modules
+    </div>
+    <div class="nav-item" onclick="showPanel('announcements')" data-panel="announcements">
+      <span class="nav-icon">📢</span> Announcements
+    </div>
+    <div class="nav-item" onclick="showPanel('discussions')" data-panel="discussions">
+      <span class="nav-icon">💬</span> Discussions
+    </div>
+    <div class="nav-item" onclick="showPanel('files')" data-panel="files">
+      <span class="nav-icon">📁</span> Files
+    </div>
+
+    <div class="nav-section-title">Activity</div>
+    <div class="nav-item" onclick="showPanel('activity')" data-panel="activity">
+      <span class="nav-icon">🔔</span> Activity Stream
+    </div>
+    <div class="nav-item" onclick="showPanel('calendar')" data-panel="calendar">
+      <span class="nav-icon">📅</span> Calendar
+    </div>
+    <div class="nav-item" onclick="showPanel('profile')" data-panel="profile">
+      <span class="nav-icon">👤</span> Profile
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main">
+
+    <!-- DASHBOARD PANEL -->
+    <div class="panel active" id="panel-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Good day, Immanuel 👋</div>
+          <div class="page-subtitle" id="dashSubtitle">Loading your Canvas data...</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button class="refresh-btn" onclick="refreshAll()">
+            <span class="refresh-icon">↻</span> Refresh
+          </button>
+          <button class="refresh-btn" id="dumpBtn" onclick="dumpAll()" style="border-color:rgba(16,185,129,0.4);color:#34d399">
+            <span id="dumpIcon">⬇</span> Export .md
+          </button>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="stat-icon">📚</div><div class="stat-value skeleton" style="width:40px;height:32px;">&nbsp;</div><div class="stat-label">Courses</div></div>
+        <div class="stat-card"><div class="stat-icon">📝</div><div class="stat-value skeleton" style="width:40px;height:32px;">&nbsp;</div><div class="stat-label">Assignments</div></div>
+        <div class="stat-card"><div class="stat-icon">⏰</div><div class="stat-value skeleton" style="width:40px;height:32px;">&nbsp;</div><div class="stat-label">Upcoming Due</div></div>
+        <div class="stat-card"><div class="stat-icon">✅</div><div class="stat-value skeleton" style="width:40px;height:32px;">&nbsp;</div><div class="stat-label">Submitted</div></div>
+      </div>
+
+      <!-- Courses preview -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📚 Active Courses</div>
+          <div class="card-action-btn" onclick="showPanel('courses')">View All →</div>
+        </div>
+        <div class="card-body">
+          <div id="dashCourses"><div style="padding:30px"><div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Recent Activity -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🔔 Recent Activity</div>
+          <div class="card-action-btn" onclick="showPanel('activity')">View All →</div>
+        </div>
+        <div class="card-body" id="dashActivity">
+          <div style="padding:30px"><div class="skeleton skeleton-line"></div><div class="skeleton skeleton-line medium"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COURSES PANEL -->
+    <div class="panel" id="panel-courses">
+      <div class="page-header">
+        <div>
+          <div class="page-title">My Courses</div>
+          <div class="page-subtitle" id="coursesSubtitle">Loading...</div>
+        </div>
+      </div>
+      <div class="courses-grid" id="coursesGrid">
+        <div class="skeleton" style="height:200px; border-radius:18px;"></div>
+        <div class="skeleton" style="height:200px; border-radius:18px;"></div>
+      </div>
+    </div>
+
+    <!-- ASSIGNMENTS PANEL -->
+    <div class="panel" id="panel-assignments">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Assignments</div>
+          <div class="page-subtitle">All assignments across your courses</div>
+        </div>
+      </div>
+      <div class="tabs" id="assignmentTabs"></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📝 Assignment List</div>
+        </div>
+        <div class="card-body" id="assignmentList">
+          <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading assignments...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRADES PANEL -->
+    <div class="panel" id="panel-grades">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Grades</div>
+          <div class="page-subtitle">Your scores and progress</div>
+        </div>
+      </div>
+      <div id="gradesContent">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading grades...</div></div>
+      </div>
+    </div>
+
+    <!-- MODULES PANEL -->
+    <div class="panel" id="panel-modules">
+      <div class="page-header">
+        <div><div class="page-title">Modules</div><div class="page-subtitle">Course content organized by module</div></div>
+      </div>
+      <div class="tabs" id="modulesTabs"></div>
+      <div id="modulesContent">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading modules...</div></div>
+      </div>
+    </div>
+
+    <!-- ANNOUNCEMENTS PANEL -->
+    <div class="panel" id="panel-announcements">
+      <div class="page-header">
+        <div><div class="page-title">Announcements</div><div class="page-subtitle">Updates from your instructors</div></div>
+      </div>
+      <div class="tabs" id="announcementsTabs"></div>
+      <div id="announcementsContent">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading announcements...</div></div>
+      </div>
+    </div>
+
+    <!-- DISCUSSIONS PANEL -->
+    <div class="panel" id="panel-discussions">
+      <div class="page-header">
+        <div><div class="page-title">Discussions</div><div class="page-subtitle">Forum topics for your courses</div></div>
+      </div>
+      <div class="tabs" id="discussionsTabs"></div>
+      <div id="discussionsContent">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading discussions...</div></div>
+      </div>
+    </div>
+
+    <!-- FILES PANEL -->
+    <div class="panel" id="panel-files">
+      <div class="page-header">
+        <div><div class="page-title">Files</div><div class="page-subtitle">Course materials and documents</div></div>
+      </div>
+      <div class="tabs" id="filesTabs"></div>
+      <div id="filesContent">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading files...</div></div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY PANEL -->
+    <div class="panel" id="panel-activity">
+      <div class="page-header">
+        <div><div class="page-title">Activity Stream</div><div class="page-subtitle">Recent events across all courses</div></div>
+      </div>
+      <div class="card">
+        <div class="card-body" id="activityFeed">
+          <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading activity...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALENDAR PANEL -->
+    <div class="panel" id="panel-calendar">
+      <div class="page-header">
+        <div><div class="page-title">Calendar</div><div class="page-subtitle">Upcoming assignments and events</div></div>
+      </div>
+      <div class="card">
+        <div class="card-body" id="calendarContent">
+          <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading calendar...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILE PANEL -->
+    <div class="panel" id="panel-profile">
+      <div class="page-title">My Profile</div>
+      <div id="profileContent">
+        <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading profile...</div></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+const API = '';
+let allCourses = [];
+let allAssignments = {};
+let currentCourseTab = null;
+let loaded = {};
+
+// =========== Navigation ===========
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  const navItem = document.querySelector(`.nav-item[data-panel="${name}"]`);
+  if (navItem) navItem.classList.add('active');
+
+  if (!loaded[name]) {
+    loaded[name] = true;
+    loadPanel(name);
+  }
+}
+
+async function loadPanel(name) {
+  switch(name) {
+    case 'dashboard': await loadDashboard(); break;
+    case 'courses': await loadCourses(); break;
+    case 'assignments': await loadAssignmentsPanel(); break;
+    case 'grades': await loadGradesPanel(); break;
+    case 'modules': await loadModulesPanel(); break;
+    case 'announcements': await loadAnnouncementsPanel(); break;
+    case 'discussions': await loadDiscussionsPanel(); break;
+    case 'files': await loadFilesPanel(); break;
+    case 'activity': await loadActivity(); break;
+    case 'calendar': await loadCalendar(); break;
+    case 'profile': await loadProfile(); break;
+  }
+}
+
+async function refreshAll() {
+  loaded = {};
+  const btn = document.querySelector('.refresh-btn');
+  btn.classList.add('spinning');
+  const currentPanel = document.querySelector('.panel.active').id.replace('panel-', '');
+  loaded[currentPanel] = true;
+  await loadPanel(currentPanel);
+  btn.classList.remove('spinning');
+  showToast('✓ Data refreshed successfully');
+}
+
+async function dumpAll() {
+  const btn = document.getElementById('dumpBtn');
+  const icon = document.getElementById('dumpIcon');
+  btn.disabled = true;
+  icon.textContent = '⏳';
+  btn.style.opacity = '0.6';
+  showToast('⏳ Fetching all Canvas data, please wait...');
+  try {
+    const res = await fetch('/api/dump-md');
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const filename = match ? match[1] : 'canvas-dump.md';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('✅ ' + filename + ' downloaded!');
+  } catch (e) {
+    showToast('❌ Dump failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    icon.textContent = '⬇';
+    btn.style.opacity = '1';
+  }
+}
+
+function showLoading() {
+  const bar = document.getElementById('loadingBar');
+  bar.className = 'loading-bar active';
+}
+function hideLoading() {
+  const bar = document.getElementById('loadingBar');
+  bar.className = 'loading-bar done';
+  setTimeout(() => { bar.className = 'loading-bar'; }, 500);
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+async function apiFetch(endpoint) {
+  const res = await fetch(API + endpoint);
+  if (!res.ok) throw new Error(`API error ${res.status}`);
+  return res.json();
+}
+
+function formatDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' at ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function timeAgo(str) {
+  if (!str) return '';
+  const now = Date.now();
+  const then = new Date(str).getTime();
+  const diff = Math.floor((now - then) / 1000);
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff/86400)}d ago`;
+  return formatDate(str);
+}
+
+function stripHtml(html) {
+  if (!html) return '';
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent || div.innerText || '';
+}
+
+// =========== DASHBOARD ===========
+async function loadDashboard() {
+  showLoading();
+  try {
+    const [profile, courses, activity] = await Promise.all([
+      apiFetch('/api/profile'),
+      apiFetch('/api/courses'),
+      apiFetch('/api/activity')
+    ]);
+
+    allCourses = courses;
+
+    // Update user card
+    const initials = (profile.name || 'IS').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+    document.getElementById('sidebarInitials').textContent = initials;
+    document.getElementById('sidebarName').textContent = profile.name;
+    document.getElementById('sidebarEmail').textContent = profile.primary_email;
+
+    // Fetch all assignments in parallel
+    let totalAssignments = 0;
+    let upcoming = 0;
+    let submitted = 0;
+
+    const assignPromises = courses.map(c => apiFetch(`/api/courses/${c.id}/assignments`).catch(() => []));
+    const allAssignData = await Promise.all(assignPromises);
+    allAssignData.forEach((assignments, i) => {
+      allAssignments[courses[i].id] = assignments;
+      totalAssignments += assignments.length;
+      const now = new Date();
+      assignments.forEach(a => {
+        if (a.due_at && new Date(a.due_at) > now) upcoming++;
+        if (a.submission && a.submission.submitted_at) submitted++;
+      });
+    });
+
+    // Stats
+    document.getElementById('statsGrid').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-icon">📚</div>
+        <div class="stat-value">${courses.length}</div>
+        <div class="stat-label">Active Courses</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">📝</div>
+        <div class="stat-value">${totalAssignments}</div>
+        <div class="stat-label">Total Assignments</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">⏰</div>
+        <div class="stat-value">${upcoming}</div>
+        <div class="stat-label">Upcoming Due</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon">✅</div>
+        <div class="stat-value">${submitted}</div>
+        <div class="stat-label">Submitted</div>
+      </div>
+    `;
+
+    // Mini course list
+    const colors = ['#6366f1','#06b6d4','#f59e0b','#ec4899','#10b981'];
+    document.getElementById('dashCourses').innerHTML = courses.map((c, i) => `
+      <div class="assignment-item" style="cursor:pointer" onclick="showPanel('courses')">
+        <div class="assignment-dot" style="background:${colors[i % colors.length]}; width:10px; height:10px;"></div>
+        <div>
+          <div class="assignment-name">${c.name}</div>
+          <div class="assignment-meta">${c.course_code || ''} · ${(allAssignments[c.id] || []).length} assignments</div>
+        </div>
+        <div><span class="badge badge-green">Active</span></div>
+      </div>
+    `).join('') || '<div class="empty-state"><div class="empty-icon">📚</div><div class="empty-title">No active courses</div></div>';
+
+    // Activity feed
+    renderActivityItems(activity.slice(0, 6), 'dashActivity');
+
+    document.getElementById('dashSubtitle').textContent = `${courses.length} courses · Last updated ${new Date().toLocaleTimeString()}`;
+
+  } catch (e) {
+    console.error(e);
+    document.getElementById('dashSubtitle').textContent = 'Failed to load data: ' + e.message;
+  }
+  hideLoading();
+}
+
+// =========== COURSES ===========
+async function loadCourses() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+    const courses = allCourses;
+    document.getElementById('coursesSubtitle').textContent = `${courses.length} active courses`;
+
+    const colors = [
+      'linear-gradient(135deg,#6366f1,#8b5cf6)',
+      'linear-gradient(135deg,#06b6d4,#10b981)',
+      'linear-gradient(135deg,#f59e0b,#ef4444)',
+      'linear-gradient(135deg,#ec4899,#8b5cf6)'
+    ];
+
+    document.getElementById('coursesGrid').innerHTML = courses.map((c, i) => {
+      const enrollment = (c.enrollments || [])[0] || {};
+      const grade = enrollment.computed_current_grade || enrollment.computed_final_grade || null;
+      const score = enrollment.computed_current_score || enrollment.computed_final_score || null;
+
+      return `
+        <div class="course-card" onclick="openCourseDetail(${c.id})">
+          <div class="course-banner" style="background:${colors[i % colors.length]}"></div>
+          <div class="course-body">
+            <span class="course-code">${c.course_code || c.id}</span>
+            <div class="course-name">${c.name}</div>
+            <div class="course-meta">
+              <span class="course-meta-item">🏫 ${c.enrollment_term_id ? 'Term ' + c.enrollment_term_id : 'N/A'}</span>
+              <span class="course-meta-item">📅 ${formatDate(c.start_at)}</span>
+              <span class="course-meta-item">📝 ${(allAssignments[c.id] || []).length} assignments</span>
+            </div>
+            <div class="course-grade">
+              <span class="grade-label">Current Grade</span>
+              <span class="grade-value">${grade ? grade + (score ? ` (${score}%)` : '') : '—'}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch(e) {
+    document.getElementById('coursesGrid').innerHTML = `<div style="padding:20px;color:var(--accent-red)">Error: ${e.message}</div>`;
+  }
+  hideLoading();
+}
+
+function openCourseDetail(courseId) {
+  showPanel('assignments');
+  // Switch to that course tab
+  setTimeout(() => {
+    const btn = document.querySelector(`#assignmentTabs .tab[data-course="${courseId}"]`);
+    if (btn) btn.click();
+  }, 200);
+}
+
+// =========== ASSIGNMENTS ===========
+async function loadAssignmentsPanel() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+    const courses = allCourses;
+
+    // Build tabs
+    const tabsEl = document.getElementById('assignmentTabs');
+    tabsEl.innerHTML = courses.map((c, i) => `
+      <div class="tab ${i === 0 ? 'active' : ''}" data-course="${c.id}" onclick="switchAssignmentTab(${c.id}, this)">
+        ${c.name.substring(0, 30)}${c.name.length > 30 ? '…' : ''}
+      </div>
+    `).join('');
+
+    await switchAssignmentTab(courses[0].id);
+  } catch(e) {
+    document.getElementById('assignmentList').innerHTML = `<div style="padding:20px;color:var(--accent-red)">Error: ${e.message}</div>`;
+  }
+  hideLoading();
+}
+
+async function switchAssignmentTab(courseId, tabEl) {
+  if (tabEl) {
+    document.querySelectorAll('#assignmentTabs .tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+  currentCourseTab = courseId;
+
+  if (!allAssignments[courseId]) {
+    allAssignments[courseId] = await apiFetch(`/api/courses/${courseId}/assignments`).catch(() => []);
+  }
+
+  const assignments = allAssignments[courseId];
+  const listEl = document.getElementById('assignmentList');
+
+  if (!assignments.length) {
+    listEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No assignments</div><div class="empty-sub">This course has no assignments yet.</div></div>';
+    return;
+  }
+
+  const now = new Date();
+  listEl.innerHTML = assignments.map(a => {
+    const dueDate = a.due_at ? new Date(a.due_at) : null;
+    const isPast = dueDate && dueDate < now;
+    const isSubmitted = a.submission && a.submission.submitted_at;
+    const isMissing = isPast && !isSubmitted;
+
+    let statusBadge = '<span class="badge badge-gray">Not Started</span>';
+    if (isSubmitted) statusBadge = '<span class="badge badge-green">✓ Submitted</span>';
+    else if (isMissing) statusBadge = '<span class="badge badge-red">⚠ Missing</span>';
+    else if (dueDate) statusBadge = '<span class="badge badge-yellow">⏳ Upcoming</span>';
+
+    const dotColor = isSubmitted ? '#10b981' : isMissing ? '#ef4444' : dueDate ? '#f59e0b' : '#7b82a0';
+
+    return `
+      <div class="assignment-item">
+        <div class="assignment-dot" style="background:${dotColor}; width:10px; height:10px;"></div>
+        <div style="flex:1">
+          <div class="assignment-name">${a.name}</div>
+          <div class="assignment-meta">
+            Due: ${dueDate ? formatDateTime(a.due_at) : 'No due date'}
+            ${a.submission && a.submission.score != null ? ` · Score: ${a.submission.score}/${a.points_possible}` : ''}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="assignment-points">${a.points_possible || 0} pts</div>
+          ${statusBadge}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// =========== GRADES ===========
+async function loadGradesPanel() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+
+    const gradePromises = allCourses.map(c =>
+      apiFetch(`/api/courses/${c.id}/grades`).catch(() => [])
+    );
+    const allGrades = await Promise.all(gradePromises);
+
+    let html = '';
+    allCourses.forEach((course, i) => {
+      const grades = allGrades[i];
+      const enrollment = grades[0] || {};
+      const g = enrollment.grades || {};
+
+      const assignments = allAssignments[course.id] || [];
+      const gradedAssignments = assignments.filter(a => a.submission && a.submission.score != null);
+
+      html += `
+        <div class="card" style="margin-bottom:18px">
+          <div class="card-header">
+            <div class="card-title">📊 ${course.name}</div>
+            <div style="display:flex;gap:10px;align-items:center">
+              ${g.current_grade ? `<span class="badge badge-green" style="font-size:0.9rem;padding:5px 14px">${g.current_grade}</span>` : ''}
+              ${g.current_score != null ? `<span class="badge badge-blue">${Math.round(g.current_score)}%</span>` : ''}
+            </div>
+          </div>
+          <div class="card-body">
+            ${gradedAssignments.length > 0 ? `
+              <table class="data-table">
+                <thead><tr><th>Assignment</th><th>Score</th><th>Points</th><th>%</th><th>Status</th></tr></thead>
+                <tbody>
+                  ${gradedAssignments.map(a => {
+                    const sub = a.submission;
+                    const pct = a.points_possible > 0 ? Math.round((sub.score / a.points_possible) * 100) : 0;
+                    const badgeCls = pct >= 90 ? 'badge-green' : pct >= 70 ? 'badge-yellow' : 'badge-red';
+                    return `<tr>
+                      <td>${a.name}</td>
+                      <td>${sub.score}</td>
+                      <td>${a.points_possible}</td>
+                      <td><span class="badge ${badgeCls}">${pct}%</span></td>
+                      <td>${sub.late ? '<span class="badge badge-yellow">Late</span>' : '<span class="badge badge-green">On Time</span>'}</td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            ` : '<div class="empty-state" style="padding:30px"><div class="empty-icon">📊</div><div class="empty-title">No graded work yet</div></div>'}
+          </div>
+        </div>
+      `;
+    });
+
+    document.getElementById('gradesContent').innerHTML = html;
+  } catch(e) {
+    document.getElementById('gradesContent').innerHTML = `<div style="padding:20px;color:var(--accent-red)">Error: ${e.message}</div>`;
+  }
+  hideLoading();
+}
+
+// =========== MODULES ===========
+async function loadModulesPanel() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+    const courses = allCourses;
+
+    document.getElementById('modulesTabs').innerHTML = courses.map((c, i) => `
+      <div class="tab ${i === 0 ? 'active' : ''}" onclick="switchModuleTab(${c.id}, this)">${c.name.substring(0, 25)}…</div>
+    `).join('');
+
+    await switchModuleTab(courses[0].id);
+  } catch(e) {}
+  hideLoading();
+}
+
+const moduleCache = {};
+async function switchModuleTab(courseId, tabEl) {
+  if (tabEl) {
+    document.querySelectorAll('#modulesTabs .tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+
+  if (!moduleCache[courseId]) {
+    moduleCache[courseId] = await apiFetch(`/api/courses/${courseId}/modules`).catch(() => []);
+  }
+  const modules = moduleCache[courseId];
+  const el = document.getElementById('modulesContent');
+
+  if (!modules.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No modules</div></div>';
+    return;
+  }
+
+  el.innerHTML = modules.map(m => `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header">
+        <div class="card-title">📦 ${m.name}</div>
+        <span class="badge badge-gray">${(m.items || []).length} items</span>
+      </div>
+      <div class="card-body">
+        ${(m.items || []).map(item => `
+          <div class="assignment-item">
+            <div class="assignment-dot" style="background:#6366f1; width:8px; height:8px;"></div>
+            <div class="assignment-name">${item.title}</div>
+            <span class="badge badge-gray">${item.type}</span>
+          </div>
+        `).join('') || '<div style="padding:14px 20px;color:var(--text-dim);font-size:0.82rem">No items in this module</div>'}
+      </div>
+    </div>
+  `).join('');
+}
+
+// =========== ANNOUNCEMENTS ===========
+async function loadAnnouncementsPanel() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+    const courses = allCourses;
+
+    document.getElementById('announcementsTabs').innerHTML = courses.map((c, i) => `
+      <div class="tab ${i === 0 ? 'active' : ''}" onclick="switchAnnouncementsTab(${c.id}, this)">${c.name.substring(0, 25)}…</div>
+    `).join('');
+
+    await switchAnnouncementsTab(courses[0].id);
+  } catch(e) {}
+  hideLoading();
+}
+
+const annCache = {};
+async function switchAnnouncementsTab(courseId, tabEl) {
+  if (tabEl) {
+    document.querySelectorAll('#announcementsTabs .tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+  if (!annCache[courseId]) {
+    annCache[courseId] = await apiFetch(`/api/courses/${courseId}/announcements`).catch(() => []);
+  }
+  const anns = annCache[courseId];
+  const el = document.getElementById('announcementsContent');
+
+  if (!anns.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📢</div><div class="empty-title">No announcements</div></div>';
+    return;
+  }
+
+  el.innerHTML = anns.map(a => `
+    <div class="card" style="margin-bottom:14px">
+      <div class="card-header">
+        <div class="card-title">📢 ${a.title}</div>
+        <span class="badge badge-gray">${timeAgo(a.posted_at)}</span>
+      </div>
+      <div style="padding:16px 22px;font-size:0.85rem;color:var(--text-muted);line-height:1.6">
+        ${stripHtml(a.message).substring(0, 400)}${stripHtml(a.message).length > 400 ? '…' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+// =========== DISCUSSIONS ===========
+const discCache = {};
+async function loadDiscussionsPanel() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+    document.getElementById('discussionsTabs').innerHTML = allCourses.map((c, i) => `
+      <div class="tab ${i === 0 ? 'active' : ''}" onclick="switchDiscTab(${c.id}, this)">${c.name.substring(0, 25)}…</div>
+    `).join('');
+    await switchDiscTab(allCourses[0].id);
+  } catch(e) {}
+  hideLoading();
+}
+
+async function switchDiscTab(courseId, tabEl) {
+  if (tabEl) {
+    document.querySelectorAll('#discussionsTabs .tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+  if (!discCache[courseId]) {
+    discCache[courseId] = await apiFetch(`/api/courses/${courseId}/discussions`).catch(() => []);
+  }
+  const discs = discCache[courseId];
+  const el = document.getElementById('discussionsContent');
+
+  if (!discs.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No discussions</div></div>';
+    return;
+  }
+
+  el.innerHTML = `<div class="card"><div class="card-body">${discs.map(d => `
+    <div class="assignment-item">
+      <div class="assignment-dot" style="background:#06b6d4; width:10px; height:10px;"></div>
+      <div>
+        <div class="assignment-name">${d.title}</div>
+        <div class="assignment-meta">${d.discussion_type || 'thread'} · ${d.discussion_subentry_count || 0} replies · ${timeAgo(d.last_reply_at)}</div>
+      </div>
+      <span class="badge ${d.pinned ? 'badge-blue' : 'badge-gray'}">${d.pinned ? '📌 Pinned' : 'Open'}</span>
+    </div>
+  `).join('')}</div></div>`;
+}
+
+// =========== FILES ===========
+const filesCache = {};
+async function loadFilesPanel() {
+  showLoading();
+  try {
+    if (allCourses.length === 0) allCourses = await apiFetch('/api/courses');
+    document.getElementById('filesTabs').innerHTML = allCourses.map((c, i) => `
+      <div class="tab ${i === 0 ? 'active' : ''}" onclick="switchFilesTab(${c.id}, this)">${c.name.substring(0, 25)}…</div>
+    `).join('');
+    await switchFilesTab(allCourses[0].id);
+  } catch(e) {}
+  hideLoading();
+}
+
+async function switchFilesTab(courseId, tabEl) {
+  if (tabEl) {
+    document.querySelectorAll('#filesTabs .tab').forEach(t => t.classList.remove('active'));
+    tabEl.classList.add('active');
+  }
+  if (!filesCache[courseId]) {
+    filesCache[courseId] = await apiFetch(`/api/courses/${courseId}/files`).catch(() => []);
+  }
+  const files = filesCache[courseId];
+  const el = document.getElementById('filesContent');
+
+  if (!files.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📁</div><div class="empty-title">No files</div></div>';
+    return;
+  }
+
+  const iconMap = { pdf: '📄', docx: '📝', pptx: '📊', xlsx: '📈', mp4: '🎬', mp3: '🎵', png: '🖼️', jpg: '🖼️', zip: '🗜️' };
+  el.innerHTML = `<div class="card"><div class="card-body">${files.map(f => {
+    const ext = (f.filename || '').split('.').pop().toLowerCase();
+    const icon = iconMap[ext] || '📄';
+    const size = f.size > 1024*1024 ? (f.size/1024/1024).toFixed(1)+'MB' : f.size > 1024 ? (f.size/1024).toFixed(0)+'KB' : f.size+'B';
+    return `
+      <div class="assignment-item">
+        <div style="font-size:22px;flex-shrink:0">${icon}</div>
+        <div style="flex:1;min-width:0">
+          <div class="assignment-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f.display_name}</div>
+          <div class="assignment-meta">${ext.toUpperCase()} · ${size} · ${timeAgo(f.updated_at)}</div>
+        </div>
+        ${f.url ? `<a href="${f.url}" target="_blank" class="card-action-btn" onclick="event.stopPropagation()">⬇ Download</a>` : ''}
+      </div>
+    `;
+  }).join('')}</div></div>`;
+}
+
+// =========== ACTIVITY ===========
+function renderActivityItems(items, containerId) {
+  const el = document.getElementById(containerId);
+  if (!items || !items.length) {
+    el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><div class="empty-title">No recent activity</div></div>';
+    return;
+  }
+
+  const iconMap = {
+    'Announcement': '📢',
+    'Conversation': '💬',
+    'Assignment': '📝',
+    'DiscussionTopic': '🗨️',
+    'Submission': '✅',
+    'Grade': '📊',
+    'WebConference': '🎥',
+    'Collaboration': '🤝',
+    'AssessmentRequest': '📋'
+  };
+
+  const colorMap = {
+    'Announcement': 'rgba(99,102,241,0.15)',
+    'Conversation': 'rgba(6,182,212,0.15)',
+    'Assignment': 'rgba(245,158,11,0.15)',
+    'DiscussionTopic': 'rgba(16,185,129,0.15)',
+    'Submission': 'rgba(16,185,129,0.15)',
+    'Grade': 'rgba(239,68,68,0.15)'
+  };
+
+  el.innerHTML = items.map(item => {
+    const type = item.type || 'Unknown';
+    const icon = iconMap[type] || '📌';
+    const color = colorMap[type] || 'rgba(255,255,255,0.05)';
+    const body = stripHtml(item.message || item.body || '').substring(0, 120);
+
+    return `
+      <div class="activity-item">
+        <div class="activity-icon-wrap" style="background:${color}">${icon}</div>
+        <div class="activity-content">
+          <div class="activity-title">${item.title || type}</div>
+          ${body ? `<div class="activity-body">${body}${body.length >= 120 ? '…' : ''}</div>` : ''}
+          ${item.course_id ? `<div class="activity-time">Course #${item.course_id} · ${timeAgo(item.updated_at || item.created_at)}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadActivity() {
+  showLoading();
+  try {
+    const data = await apiFetch('/api/activity');
+    renderActivityItems(data, 'activityFeed');
+  } catch(e) {
+    document.getElementById('activityFeed').innerHTML = `<div style="padding:20px;color:var(--accent-red)">Error: ${e.message}</div>`;
+  }
+  hideLoading();
+}
+
+// =========== CALENDAR ===========
+async function loadCalendar() {
+  showLoading();
+  try {
+    const data = await apiFetch('/api/calendar');
+    const el = document.getElementById('calendarContent');
+
+    if (!data.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">No upcoming events</div><div class="empty-sub">All clear for the next 30 days!</div></div>';
+      return;
+    }
+
+    el.innerHTML = data.map(ev => `
+      <div class="activity-item">
+        <div class="activity-icon-wrap" style="background:rgba(99,102,241,0.15)">📅</div>
+        <div class="activity-content">
+          <div class="activity-title">${ev.title}</div>
+          <div class="activity-body">${ev.context_name || ''}</div>
+          <div class="activity-time">${formatDateTime(ev.start_at)}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    document.getElementById('calendarContent').innerHTML = `<div style="padding:20px;color:var(--accent-red)">Error: ${e.message}</div>`;
+  }
+  hideLoading();
+}
+
+// =========== PROFILE ===========
+async function loadProfile() {
+  showLoading();
+  try {
+    const [profile, enrollments] = await Promise.all([
+      apiFetch('/api/profile'),
+      apiFetch('/api/enrollments')
+    ]);
+
+    const initials = (profile.name || 'IS').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    document.getElementById('profileContent').innerHTML = `
+      <div class="profile-hero">
+        <div class="profile-avatar-big">${initials}</div>
+        <div class="profile-info">
+          <div class="profile-name">${profile.name}</div>
+          <div class="profile-id">Student ID: ${profile.login_id} · Canvas ID: ${profile.id}</div>
+          <div class="profile-fields">
+            <div class="profile-field">
+              <div class="profile-field-label">Email</div>
+              <div class="profile-field-value">${profile.primary_email || '—'}</div>
+            </div>
+            <div class="profile-field">
+              <div class="profile-field-label">Short Name</div>
+              <div class="profile-field-value">${profile.short_name || '—'}</div>
+            </div>
+            <div class="profile-field">
+              <div class="profile-field-label">Time Zone</div>
+              <div class="profile-field-value">${profile.time_zone || '—'}</div>
+            </div>
+            <div class="profile-field">
+              <div class="profile-field-label">Locale</div>
+              <div class="profile-field-value">${profile.effective_locale || 'en'}</div>
+            </div>
+            <div class="profile-field">
+              <div class="profile-field-label">LTI User ID</div>
+              <div class="profile-field-value" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem">${profile.lti_user_id || '—'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">📚 Enrollment History</div></div>
+        <div class="card-body">
+          <table class="data-table">
+            <thead><tr><th>Course ID</th><th>Role</th><th>State</th><th>Grade</th><th>Score</th><th>Last Activity</th></tr></thead>
+            <tbody>
+              ${enrollments.map(e => `
+                <tr>
+                  <td style="font-family:'JetBrains Mono',monospace;font-size:0.78rem">${e.course_id}</td>
+                  <td><span class="badge badge-blue">${e.role || e.type}</span></td>
+                  <td><span class="badge ${e.enrollment_state === 'active' ? 'badge-green' : 'badge-gray'}">${e.enrollment_state}</span></td>
+                  <td>${(e.grades && e.grades.current_grade) || '—'}</td>
+                  <td>${(e.grades && e.grades.current_score != null) ? e.grades.current_score + '%' : '—'}</td>
+                  <td>${timeAgo(e.last_activity_at)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">📅 Calendar Feed</div></div>
+        <div style="padding:16px 22px">
+          <a href="${profile.calendar && profile.calendar.ics}" target="_blank" class="card-action-btn" style="display:inline-flex;align-items:center;gap:8px">
+            📅 Subscribe to iCalendar feed
+          </a>
+        </div>
+      </div>
+    `;
+  } catch(e) {
+    document.getElementById('profileContent').innerHTML = `<div style="padding:20px;color:var(--accent-red)">Error: ${e.message}</div>`;
+  }
+  hideLoading();
+}
+
+// =========== INIT ===========
+loadDashboard();
+loaded['dashboard'] = true;
+</script>
+</body>
+</html>

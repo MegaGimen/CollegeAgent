@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚕ Networker - Obsidian Webpage Graph Builder</title>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root {
+      --bg-dark: #0f111a;
+      --bg-glass: rgba(22, 28, 45, 0.6);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --accent-cyan: #00f2fe;
+      --accent-purple: #9b51e0;
+      --accent-green: #00ff87;
+      --accent-red: #ff4757;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --sidebar-width: 400px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background-color: var(--bg-dark);
+      background-image: radial-gradient(circle at 10% 20%, rgba(90, 120, 240, 0.1) 0%, transparent 40%),
+                        radial-gradient(circle at 90% 80%, rgba(150, 80, 220, 0.08) 0%, transparent 45%);
+      background-attachment: fixed;
+      color: var(--text-main);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+    }
+
+    /* Glassmorphism sidebar */
+    aside {
+      width: var(--sidebar-width);
+      height: 100%;
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-right: 1px solid var(--border-glass);
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      overflow-y: auto;
+    }
+
+    header {
+      margin-bottom: 1.5rem;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .logo-icon {
+      color: var(--accent-cyan);
+      filter: drop-shadow(0 0 8px rgba(0, 242, 254, 0.5));
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .tagline {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--accent-cyan);
+      margin: 1.5rem 0 0.75rem 0;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(0, 242, 254, 0.15);
+      padding-bottom: 0.25rem;
+    }
+
+    .control-group {
+      margin-bottom: 1rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.4rem;
+      color: var(--text-main);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    label span.val {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--accent-cyan);
+    }
+
+    input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 0.75rem 0.85rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-glass);
+      border-radius: 10px;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.9rem;
+      transition: all 0.3s ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(0, 242, 254, 0.12);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 5px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      outline: none;
+      -webkit-appearance: none;
+      margin-top: 0.4rem;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      cursor: pointer;
+      box-shadow: 0 0 6px rgba(0, 242, 254, 0.8);
+    }
+
+    .tasks-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .task-item {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-glass);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .task-item:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .task-item.active {
+      border-color: var(--accent-cyan);
+      background: rgba(0, 242, 254, 0.04);
+    }
+
+    .task-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .task-seed {
+      font-size: 0.8rem;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+
+    .task-status-badge {
+      font-size: 0.65rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 99px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .task-status-badge.crawling { background: rgba(0, 242, 254, 0.2); color: var(--accent-cyan); }
+    .task-status-badge.completed { background: rgba(0, 255, 135, 0.2); color: var(--accent-green); }
+    .task-status-badge.aborted { background: rgba(255, 71, 87, 0.2); color: var(--accent-red); }
+    .task-status-badge.error { background: rgba(255, 71, 87, 0.2); color: var(--accent-red); }
+    .task-status-badge.pending { background: rgba(255, 255, 255, 0.1); color: var(--text-muted); }
+    .task-status-badge.queued { background: rgba(255, 193, 7, 0.2); color: #ffc107; }
+
+    .task-meta {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.8rem;
+      border-radius: 10px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
+      color: #000;
+      font-weight: 700;
+      border: none;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.2);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(0, 242, 254, 0.35);
+    }
+
+    .btn-danger {
+      background: rgba(255, 71, 87, 0.15);
+      border: 1px solid rgba(255, 71, 87, 0.3);
+      color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+      background: rgba(255, 71, 87, 0.25);
+      border-color: rgba(255, 71, 87, 0.5);
+    }
+
+    .btn-obsidian {
+      background: #7928ca;
+      color: white;
+      border: none;
+      box-shadow: 0 4px 15px rgba(121, 40, 202, 0.25);
+    }
+
+    .btn-obsidian:hover {
+      background: #8b3fd6;
+      box-shadow: 0 6px 20px rgba(121, 40, 202, 0.4);
+    }
+
+    .btn-download {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      border: none;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+    }
+
+    .btn-download:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Main Area layout */
+    main {
+      flex-grow: 1;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 1.5rem;
+      overflow-y: auto;
+    }
+
+    .details-view {
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      border-radius: 16px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      min-height: 100%;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex-grow: 1;
+      color: var(--text-muted);
+      gap: 1rem;
+      text-align: center;
+    }
+
+    /* Header Panel with Metrics */
+    .task-header-block {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid var(--border-glass);
+      padding-bottom: 1rem;
+    }
+
+    .task-title-info h2 {
+      font-size: 1.4rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .task-title-info p {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .metrics-container {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+
+    .metric-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-glass);
+      border-radius: 10px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .metric-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      margin-bottom: 0.2rem;
+    }
+
+    .metric-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--accent-cyan);
+    }
+
+    .metric-value.pending { color: var(--text-muted); }
+    .metric-value.errors { color: var(--accent-red); }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.4rem 0.85rem;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-glass);
+      border-radius: 99px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background-color: var(--text-muted);
+      border-radius: 50%;
+    }
+
+    .status-badge.crawling .status-dot {
+      background-color: var(--accent-cyan);
+      box-shadow: 0 0 6px var(--accent-cyan);
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    .status-badge.completed .status-dot {
+      background-color: var(--accent-green);
+      box-shadow: 0 0 6px var(--accent-green);
+    }
+
+    .status-badge.aborted .status-dot, .status-badge.error .status-dot {
+      background-color: var(--accent-red);
+    }
+
+    /* Obsidian integration section */
+    .obsidian-box {
+      background: rgba(121, 40, 202, 0.05);
+      border: 1px dashed rgba(121, 40, 202, 0.25);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .obsidian-box-title {
+      font-weight: 600;
+      color: #a855f7;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .path-display {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 0.6rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border-glass);
+      word-break: break-all;
+      user-select: all;
+    }
+
+    .obsidian-steps {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      padding-left: 1.2rem;
+    }
+
+    .obsidian-steps li {
+      margin-bottom: 0.25rem;
+    }
+
+    /* Live logs panel (Expanded to fill space) */
+    .logs-panel {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border-glass);
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(15, 17, 26, 0.5);
+      min-height: 300px;
+    }
+
+    .logs-header {
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border-glass);
+      padding: 0.5rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logs-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-main);
+    }
+
+    .logs-body {
+      flex-grow: 1;
+      padding: 0.75rem 1rem;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: #38bdf8;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .log-entry { line-height: 1.35; }
+    .log-entry.error { color: var(--accent-red); }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside>
+    <div class="logo-container">
+      <i data-lucide="network" class="logo-icon" size="26"></i>
+      <h1>Networker</h1>
+    </div>
+    <p class="tagline">Obsidian Website Mapper & Crawler</p>
+
+    <!-- Crawl Config -->
+    <div class="section-title">New Task Setup</div>
+    
+    <div class="control-group">
+      <label for="url">Seed URL</label>
+      <input type="text" id="url" placeholder="https://example.com" value="https://orientation.berkeley.edu/new-students/golden-bear-experience/golden-bear-advising/">
+    </div>
+
+    <div class="control-group">
+      <label for="depth">Crawl Depth <span id="depth-val" class="val">3</span></label>
+      <input type="range" id="depth" min="1" max="6" value="3" oninput="document.getElementById('depth-val').textContent = this.value">
+    </div>
+
+    <div class="control-group">
+      <label for="pages">Max Pages <span id="pages-val" class="val">50</span></label>
+      <input type="range" id="pages" min="0" max="150" value="50" oninput="document.getElementById('pages-val').textContent = this.value === '0' ? 'Unlimited' : this.value">
+    </div>
+
+    <div class="control-group">
+      <label for="vault">Obsidian Vault Path</label>
+      <input type="text" id="vault" placeholder="Default: ./vault">
+    </div>
+    
+    <div class="control-group">
+      <label for="inherit-task">Inherit From Task (Optional)</label>
+      <select id="inherit-task" style="width: 100%; padding: 0.6rem 0.75rem; background: rgba(255,255,255,0.04); border: 1px solid var(--border-glass); border-radius: 8px; color: var(--text-main); font-size: 0.8rem; height: 38px; outline: none; transition: border-color 0.2s;">
+        <option value="">-- None (Fresh Crawl) --</option>
+      </select>
+    </div>
+
+    <div class="control-group" style="margin-top: 1.25rem;">
+      <label for="banlist-input" style="color: var(--accent-red); font-weight: 600;">
+        <span>URL Ban List (Pruning)</span>
+        <span style="font-size: 0.75rem; text-transform: none; color: var(--text-muted);">One pattern per line</span>
+      </label>
+      <textarea id="banlist-input" rows="4" style="width: 100%; padding: 0.6rem 0.75rem; background: rgba(255,255,255,0.04); border: 1px solid var(--border-glass); border-radius: 8px; color: var(--text-main); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; resize: vertical;" placeholder="e.g.&#10;wp-admin&#10;facebook.com&#10;wp-content/uploads"></textarea>
+      <button id="save-banlist-btn" class="btn-primary" style="margin-top: 0.5rem; padding: 0.5rem; font-size: 0.8rem; background: rgba(255, 71, 87, 0.15); border: 1px solid rgba(255, 71, 87, 0.3); color: var(--accent-red); font-weight: 500; height: 32px; box-shadow: none;">
+        <i data-lucide="save" size="12"></i> Save Ban List
+      </button>
+    </div>
+
+    <button id="start-btn" class="btn-primary">
+      <i data-lucide="plus" size="16"></i>
+      Spawn Crawl Task
+    </button>
+    
+    <div class="section-title" style="margin-top: 1.5rem;">Private Vault Download</div>
+    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem;">
+      <input type="text" id="private-userid-input" placeholder="Enter User ID" style="padding: 0.6rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(0,0,0,0.2); color: white; outline: none; font-family: 'Outfit', sans-serif;">
+      <button id="download-private-vault-btn" style="padding: 0.6rem 1.2rem; background: rgba(255, 71, 87, 0.15); border: 1px solid rgba(255, 71, 87, 0.3); color: var(--accent-red); border-radius: 8px; cursor: pointer; font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 0.4rem; transition: all 0.2s ease;">
+        <i data-lucide="lock" size="14"></i>
+        Download Private Vault
+      </button>
+    </div>
+
+    <!-- Task History -->
+    <div class="section-title">Crawl Tasks</div>
+    <div style="margin-bottom: 0.75rem;">
+      <input type="text" id="user-task-search-input" placeholder="Filter tasks by User ID..." style="padding: 0.5rem 0.75rem; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(0,0,0,0.2); color: white; outline: none; font-family: 'Outfit', sans-serif; font-size: 0.8rem; width: 100%;">
+    </div>
+    <div id="tasks-list" class="tasks-list">
+      <p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 1rem;">No tasks found</p>
+    </div>
+  </aside>
+
+  <!-- Main View -->
+  <main>
+    <div id="empty-state" class="empty-state">
+      <i data-lucide="layout-dashboard" size="64" style="color: var(--text-muted);"></i>
+      <h2>Select a Task to View Details</h2>
+      <p>Configure a new crawling task on the sidebar, or select an existing one to load details.</p>
+    </div>
+
+    <div id="details-view" class="details-view" style="display: none;">
+      <!-- Task Header -->
+      <div class="task-header-block">
+        <div class="task-title-info">
+          <h2 id="task-seed-display">https://example.com</h2>
+          <p id="task-id-display">ID: task_123</p>
+        </div>
+        
+        <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <div id="status-badge" class="status-badge">
+            <div class="status-dot"></div>
+            <span id="status-text">Idle</span>
+          </div>
+          <button id="abort-btn" class="btn-danger" style="width: auto; padding: 0.5rem 1rem;">
+            <i data-lucide="square" size="14"></i>
+            Abort Task
+          </button>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-container">
+        <div class="metric-card">
+          <span class="metric-label">Pages Crawled</span>
+          <span id="metric-crawled" class="metric-value">0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Pending Links</span>
+          <span id="metric-pending" class="metric-value pending">0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Errors</span>
+          <span id="metric-errors" class="metric-value errors">0</span>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Total Links</span>
+          <span id="metric-links" class="metric-value">0</span>
+        </div>
+      </div>
+
+      <!-- Obsidian Export Block -->
+      <div class="obsidian-box">
+        <div class="obsidian-box-title">
+          <i data-lucide="book-open" size="18"></i>
+          <span>Obsidian Integration & Local Storage</span>
+        </div>
+        
+        <div class="path-display" id="vault-path-display">
+          /home/collegeagent/networker/vault/example_task_123
+        </div>
+
+        <div style="display: flex; gap: 1rem; align-items: center; margin: 0.25rem 0; flex-wrap: wrap;">
+          <button id="download-zip-btn" class="btn-download" style="width: auto; padding: 0.6rem 1.2rem;">
+            <i data-lucide="download" size="14"></i>
+            Download Vault ZIP
+          </button>
+          
+          <button id="open-obsidian-btn" class="btn-obsidian" style="width: auto; padding: 0.6rem 1.2rem;">
+            <i data-lucide="external-link" size="14"></i>
+            Open Local Vault
+          </button>
+          
+          <button id="promote-to-kb-btn" style="width: auto; padding: 0.6rem 1.2rem; background: linear-gradient(135deg, rgba(0, 255, 135, 0.15), rgba(0, 242, 254, 0.15)); border: 1px solid rgba(0, 255, 135, 0.3); color: var(--accent-green); border-radius: 8px; cursor: pointer; font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s ease;">
+            <i data-lucide="brain" size="14"></i>
+            Promote to Knowledge Base
+          </button>
+          
+          <button id="rebuild-index-btn" style="width: auto; padding: 0.6rem 1.2rem; background: rgba(155, 81, 224, 0.15); border: 1px solid rgba(155, 81, 224, 0.3); color: var(--accent-purple); border-radius: 8px; cursor: pointer; font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s ease;">
+            <i data-lucide="refresh-cw" size="14"></i>
+            Rebuild MCP Index
+          </button>
+          
+          <button id="download-mcp-vault-btn" style="width: auto; padding: 0.6rem 1.2rem; background: rgba(0, 242, 254, 0.1); border: 1px solid rgba(0, 242, 254, 0.3); color: var(--accent-cyan); border-radius: 8px; cursor: pointer; font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem; transition: all 0.2s ease;">
+            <i data-lucide="archive" size="14"></i>
+            Download MCP Vault
+          </button>
+        </div>
+
+
+        <ol class="obsidian-steps">
+          <li>Download the Vault ZIP archive to your local device.</li>
+          <li>Unzip the file, open **Obsidian**, and load it as a Vault.</li>
+          <li>Press <kbd>Ctrl + G</kbd> to explore the interactive **Graph View** locally inside Obsidian.</li>
+        </ol>
+      </div>
+
+      <!-- Logs -->
+      <div class="logs-panel" id="logs-panel">
+        <div class="logs-header">
+          <div class="logs-title">
+            <i data-lucide="terminal" size="14"></i>
+            <span>Real-time Task Logs</span>
+          </div>
+        </div>
+        <div id="logs-body" class="logs-body">
+          <!-- logs populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    // Elements
+    const startBtn = document.getElementById('start-btn');
+    const abortBtn = document.getElementById('abort-btn');
+    const openObsidianBtn = document.getElementById('open-obsidian-btn');
+    const downloadZipBtn = document.getElementById('download-zip-btn');
+    const urlInput = document.getElementById('url');
+    const depthInput = document.getElementById('depth');
+    const pagesInput = document.getElementById('pages');
+    const vaultInput = document.getElementById('vault');
+    
+    const tasksList = document.getElementById('tasks-list');
+    const emptyState = document.getElementById('empty-state');
+    const detailsView = document.getElementById('details-view');
+    
+    const taskSeedDisplay = document.getElementById('task-seed-display');
+    const taskIdDisplay = document.getElementById('task-id-display');
+    const vaultPathDisplay = document.getElementById('vault-path-display');
+    const statusText = document.getElementById('status-text');
+    const statusBadge = document.getElementById('status-badge');
+    const logsBody = document.getElementById('logs-body');
+
+    // Metrics
+    const metricCrawled = document.getElementById('metric-crawled');
+    const metricPending = document.getElementById('metric-pending');
+    const metricErrors = document.getElementById('metric-errors');
+    const metricLinks = document.getElementById('metric-links');
+
+    let activeTaskId = null;
+    let eventSource = null;
+    let taskNodes = new Map();
+    let edgeCount = 0;
+
+    // Load tasks list
+    const userSearchInput = document.getElementById('user-task-search-input');
+    if (userSearchInput && !userSearchInput.dataset.bound) {
+      userSearchInput.dataset.bound = 'true';
+      userSearchInput.addEventListener('input', () => loadTasksList());
+    }
+
+    async function loadTasksList() {
+      try {
+        const userIdVal = document.getElementById('user-task-search-input')?.value?.trim();
+        const fetchUrl = userIdVal ? `/api/tasks?userId=${encodeURIComponent(userIdVal)}` : '/api/tasks';
+        const res = await fetch(fetchUrl);
+        const list = await res.json();
+        
+        // Populate inherit task dropdown
+        const inheritTaskSelect = document.getElementById('inherit-task');
+        const prevSelected = inheritTaskSelect.value;
+        inheritTaskSelect.innerHTML = '<option value="">-- None (Fresh Crawl) --</option>';
+        
+        const sortedList = [...list].reverse();
+        sortedList.forEach(task => {
+          const dateObj = new Date(task.startTime);
+          const timestamp = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')} ${String(dateObj.getHours()).padStart(2,'0')}:${String(dateObj.getMinutes()).padStart(2,'0')}:${String(dateObj.getSeconds()).padStart(2,'0')}`;
+          const opt = document.createElement('option');
+          opt.value = task.id;
+          opt.textContent = `${timestamp} | ${task.seedUrl.replace('https://', '').substring(0, 30)}...`;
+          inheritTaskSelect.appendChild(opt);
+        });
+        if (prevSelected) {
+          inheritTaskSelect.value = prevSelected;
+        }
+
+        if (list.length === 0) {
+          tasksList.innerHTML = `<p style="font-size: 0.8rem; color: var(--text-muted); text-align: center; margin-top: 1rem;">No tasks found</p>`;
+          return;
+        }
+
+        tasksList.innerHTML = '';
+        list.reverse().forEach(task => {
+          const item = document.createElement('div');
+          item.className = `task-item ${task.id === activeTaskId ? 'active' : ''}`;
+          item.dataset.id = task.id;
+
+          const dateObj = new Date(task.startTime);
+          const timestamp = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')} ${String(dateObj.getHours()).padStart(2,'0')}:${String(dateObj.getMinutes()).padStart(2,'0')}:${String(dateObj.getSeconds()).padStart(2,'0')}`;
+
+          item.innerHTML = `
+            <div class="task-item-header">
+              <span class="task-seed" title="${task.seedUrl}">${task.seedUrl}</span>
+              <span class="task-status-badge ${task.status}">${task.status}</span>
+            </div>
+            <div class="task-meta">
+              <span>Created: ${timestamp}</span>
+              <span>Pages: ${task.nodesCount}</span>
+            </div>
+          `;
+
+          item.addEventListener('click', () => selectTask(task.id, task.seedUrl, task.vaultPath));
+          tasksList.appendChild(item);
+        });
+      } catch (e) {
+        console.error('Failed to load tasks list', e);
+      }
+    }
+
+    // Select a task
+    function selectTask(taskId, seedUrl, vaultPath) {
+      if (activeTaskId === taskId) return;
+      
+      activeTaskId = taskId;
+      taskNodes.clear();
+      edgeCount = 0;
+
+      // Update UI selection
+      document.querySelectorAll('.task-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.id === taskId);
+      });
+
+      emptyState.style.display = 'none';
+      detailsView.style.display = 'flex';
+
+      taskSeedDisplay.textContent = seedUrl;
+      
+      const taskTimeStr = taskId.split('_')[1];
+      let formattedTime = '';
+      if (taskTimeStr && !isNaN(taskTimeStr)) {
+        const dateObj = new Date(parseInt(taskTimeStr));
+        formattedTime = ` | Created: ${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}-${String(dateObj.getDate()).padStart(2,'0')} ${String(dateObj.getHours()).padStart(2,'0')}:${String(dateObj.getMinutes()).padStart(2,'0')}:${String(dateObj.getSeconds()).padStart(2,'0')}`;
+      }
+      taskIdDisplay.textContent = `ID: ${taskId}${formattedTime}`;
+      vaultPathDisplay.textContent = vaultPath;
+
+      // Download ZIP action
+      downloadZipBtn.onclick = () => {
+        window.location.href = `/api/tasks/${taskId}/download`;
+      };
+
+      // Open local folder protocol link
+      openObsidianBtn.onclick = () => {
+        const obsidianUri = `obsidian://open?path=${encodeURIComponent(vaultPath)}`;
+        window.location.href = obsidianUri;
+      };
+
+      logsBody.innerHTML = '';
+      updateMetrics();
+
+      if (eventSource) {
+        eventSource.close();
+      }
+
+      eventSource = new EventSource(`/api/tasks/${taskId}/stream`);
+      
+      eventSource.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        handleStreamEvent(payload);
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+      };
+    }
+
+    function handleStreamEvent(event) {
+      const { type, data } = event;
+
+      if (type === 'status') {
+        updateStatus(data.status);
+        loadTasksList();
+      } 
+      else if (type === 'log') {
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${data.isError ? 'error' : ''}`;
+        entry.textContent = data.text;
+        logsBody.appendChild(entry);
+        logsBody.scrollTop = logsBody.scrollHeight;
+      } 
+      else if (type === 'node-added') {
+        taskNodes.set(data.id, data);
+        updateMetrics();
+      } 
+      else if (type === 'node-deleted') {
+        taskNodes.delete(data.id);
+        updateMetrics();
+      }
+      else if (type === 'edge-added') {
+        edgeCount++;
+        updateMetrics();
+      }
+    }
+
+    function updateStatus(status) {
+      statusBadge.className = `status-badge ${status}`;
+      statusText.textContent = status;
+
+      if (status === 'crawling') {
+        abortBtn.style.display = 'flex';
+      } else {
+        abortBtn.style.display = 'none';
+      }
+    }
+
+    function updateMetrics() {
+      const nodes = Array.from(taskNodes.values());
+      const visitedCount = nodes.filter(n => n.status === 'visited').length;
+      const pendingCount = nodes.filter(n => n.status === 'pending').length;
+      const errorCount = nodes.filter(n => n.status === 'error').length;
+
+      metricCrawled.textContent = visitedCount;
+      metricPending.textContent = pendingCount;
+      metricErrors.textContent = errorCount;
+      metricLinks.textContent = edgeCount;
+    }
+
+    async function startCrawlTask() {
+      const url = urlInput.value.trim();
+      const maxDepth = depthInput.value;
+      const maxPages = pagesInput.value;
+      const vaultPath = vaultInput.value.trim();
+      const inheritTaskId = document.getElementById('inherit-task').value;
+
+      if (!url) {
+        alert('Please specify a valid Seed URL');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, maxDepth, maxPages, vaultPath, inheritTaskId })
+        });
+
+        const data = await res.json();
+        if (data.error) {
+          alert('Error: ' + data.error);
+          return;
+        }
+
+        selectTask(data.id, data.seedUrl, data.vaultPath);
+        await loadTasksList();
+      } catch (err) {
+        alert('Failed to spawn crawl task: ' + err.message);
+      }
+    }
+
+    async function abortActiveTask() {
+      if (!activeTaskId) return;
+      try {
+        await fetch(`/api/tasks/${activeTaskId}/abort`, { method: 'POST' });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    const banlistInput = document.getElementById('banlist-input');
+    const saveBanlistBtn = document.getElementById('save-banlist-btn');
+
+    async function loadBanlist() {
+      try {
+        const res = await fetch('/api/banlist');
+        const list = await res.json();
+        banlistInput.value = list.join('\n');
+      } catch (err) {
+        console.error('Failed to load banlist:', err);
+      }
+    }
+
+    saveBanlistBtn.addEventListener('click', async () => {
+      const list = banlistInput.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+      try {
+        const res = await fetch('/api/banlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ banlist: list })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('URL Ban List saved successfully to server disk.');
+        } else {
+          alert('Failed to save banlist: ' + data.error);
+        }
+      } catch (err) {
+        alert('Failed to save banlist: ' + err.message);
+      }
+    });
+
+    startBtn.addEventListener('click', startCrawlTask);
+    abortBtn.addEventListener('click', abortActiveTask);
+    
+    // Promote to Knowledge Base button
+    document.getElementById('promote-to-kb-btn').addEventListener('click', async () => {
+      if (!activeTaskId) {
+        alert('No task selected');
+        return;
+      }
+      
+      const btn = document.getElementById('promote-to-kb-btn');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i data-lucide="loader" size="14"></i> Copying...';
+      btn.disabled = true;
+      lucide.createIcons();
+      
+      try {
+        const res = await fetch(`/api/tasks/${activeTaskId}/promote-to-knowledge-base`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(`✅ ${data.message}`);
+        } else {
+          alert('❌ Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Failed: ' + err.message);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        lucide.createIcons();
+      }
+    });
+    
+    // Rebuild MCP Index button
+    document.getElementById('rebuild-index-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('rebuild-index-btn');
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '<i data-lucide="loader" size="14"></i> Rebuilding...';
+      btn.disabled = true;
+      lucide.createIcons();
+      
+      try {
+        const res = await fetch('/api/mcp/rebuild-index', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('✅ MCP index rebuilt successfully!');
+        } else {
+          alert('❌ Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Failed: ' + err.message);
+      } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        lucide.createIcons();
+      }
+    });
+    
+    // Download MCP Vault button
+    document.getElementById('download-mcp-vault-btn').addEventListener('click', () => {
+      window.location.href = '/api/mcp/download';
+    });
+    
+    document.getElementById('download-private-vault-btn').addEventListener('click', () => {
+      const userId = document.getElementById('private-userid-input').value.trim();
+      if (!userId) {
+        alert('Please enter a User ID first.');
+        return;
+      }
+      window.location.href = `/api/vault/download/private/${userId}`;
+    });
+    
+    loadBanlist();
+    loadTasksList();
+    setInterval(loadTasksList, 8000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+node_modules/
+memories/
+data.json
+.dart_tool/
+build/
+*.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.metadata
+pubspec.lock
+*.apk
+*.cjs
+.agents/
+test_cite.js

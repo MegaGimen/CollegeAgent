@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs & caches
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.metadata
+pubspec.lock
+*.apk
+*.pyc
+__pycache__/
+
+# Databases & local tokens
+*.db
+tokens.db
+data.json
+memories/
+
+# Environment and local configs
+.env
+.DS_Store
+
+# Temporary & scratch directories
+scratch/

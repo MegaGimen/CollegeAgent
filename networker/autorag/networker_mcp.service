@@ -1,0 +1,24 @@
+[Unit]
+Description=Networker MCP AutoRAG Search API
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/collegeagent/networker/autorag
+
+# Ensure data/ exists; run setup.py if corpus is missing
+ExecStartPre=/bin/bash -c "test -f /home/collegeagent/networker/autorag/data/best.json || /usr/bin/python3 /home/collegeagent/networker/autorag/setup.py"
+
+# Start the AutoRAG search API on port 8001
+ExecStart=/usr/bin/python3 /home/collegeagent/networker/autorag/run_api.py --host 127.0.0.1 --port 8002
+
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=30
+TimeoutStopSec=10
+
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
