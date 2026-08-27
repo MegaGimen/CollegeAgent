@@ -605,6 +605,61 @@ app.post('/api/sessions', (req, res) => {
   res.status(201).json(session);
 });
 
+// ── POST /api/sessions/fork ──────────────────────────────────────────────────
+
+app.post('/api/sessions/fork', (req, res) => {
+  const { userId, sessionId } = req.body;
+  if (!userId || !sessionId) {
+    return res.status(400).json({ error: 'userId and sessionId required' });
+  }
+
+  const parentSession = sessions.get(sessionId);
+  if (!parentSession) {
+    return res.status(404).json({ error: 'Source session not found' });
+  }
+
+  const newSessionId = uuidv4();
+  const rootId = parentSession.parentId || parentSession.id || sessionId;
+  const now = new Date().toISOString();
+
+  // Clone messages
+  const srcMsgs = messages.get(sessionId) || [];
+  const clonedMsgs = srcMsgs.map((m) => ({
+    ...m,
+    id: uuidv4(),
+    sessionId: newSessionId,
+    seq: ++seqCounter,
+  }));
+  messages.set(newSessionId, clonedMsgs);
+
+  // Clone source registry if exists
+  if (_sourceRegistries.has(sessionId)) {
+    const srcReg = _sourceRegistries.get(sessionId);
+    try {
+      _sourceRegistries.set(newSessionId, JSON.parse(JSON.stringify(srcReg)));
+    } catch (_) {}
+  }
+
+  const session = {
+    id: newSessionId,
+    sessionId: newSessionId,
+    userId,
+    parentId: rootId,
+    title: parentSession.title ? `${parentSession.title} (Fork)` : 'Forked Session',
+    status: 'active',
+    createdAt: now,
+    lastActive: now,
+    pinned: false,
+    lastMessage: parentSession.lastMessage || null,
+    latestAssistant: parentSession.latestAssistant || null,
+    msgCount: clonedMsgs.length,
+  };
+
+  sessions.set(newSessionId, session);
+  saveData();
+  res.status(201).json(session);
+});
+
 // ── GET /api/vault/download/:userId ──────────────────────────────────────────
 
 app.get('/api/vault/download/:userId', (req, res) => {
@@ -1926,8 +1981,17 @@ app.post('/api/canvas/batch-fetch-graph', async (req, res) => {
 app.delete('/api/sessions/:id', (req, res) => {
   const { id } = req.params;
   if (!sessions.has(id)) return res.status(404).json({ error: 'session not found' });
+  // Also delete child subagents if any
+  for (const [sid, sess] of sessions.entries()) {
+    if (sess.parentId === id) {
+      sessions.delete(sid);
+      messages.delete(sid);
+      _sourceRegistries.delete(sid);
+    }
+  }
   sessions.delete(id);
   messages.delete(id);
+  _sourceRegistries.delete(id);
   saveData();
   res.json({ ok: true });
 });
