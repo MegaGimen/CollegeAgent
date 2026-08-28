@@ -738,10 +738,12 @@ app.post('/api/chat', async (req, res) => {
   };
   activeChatStreams.set(sessionId, streamState);
 
-  req.on('close', () => {
-    streamState.isStopped = true;
-    if (streamState.abortStream) {
-      try { streamState.abortStream(new Error('Client disconnected')); } catch (e) {}
+  res.on('close', () => {
+    if (!done && !res.writableEnded) {
+      streamState.isStopped = true;
+      if (streamState.abortStream) {
+        try { streamState.abortStream(new Error('Client disconnected')); } catch (e) {}
+      }
     }
   });
 
