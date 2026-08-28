@@ -172,6 +172,13 @@ export async function crawlPagesSync(urls, vaultDir) {
         const uniqueLinks = Array.from(new Map(outboundLinks.map(l => [l.url, l])).values());
         
         let fileMarkdown = `# ${rawTitle}\n\n**URL**: ${url}\n\n${pageMarkdown}`;
+        if (uniqueLinks.length > 0) {
+          fileMarkdown += '\n\n## Outbound Links\n\n';
+          for (const link of uniqueLinks) {
+            const cleanLinkTitle = sanitizeFilename(link.title, link.url);
+            fileMarkdown += `- [[${cleanLinkTitle}]] ([${link.title || cleanLinkTitle}](${link.url}))\n`;
+          }
+        }
         if (vaultDir) {
            const filename = `${cleanTitle}_${Date.now().toString().slice(-4)}.md`;
            const filepath = join(vaultDir, filename);

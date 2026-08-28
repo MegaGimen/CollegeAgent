@@ -266,7 +266,8 @@ async function crawlPagesSync(urls, vaultDir) {
         mdContent += `## Outbound Links\n\n`;
         if (outboundLinks.length > 0) {
           for (const link of outboundLinks) {
-            mdContent += `- [[${sanitizeFilename(link.title, link.url)}]]\n`;
+            const cleanLinkTitle = sanitizeFilename(link.title, link.url);
+            mdContent += `- [[${cleanLinkTitle}]] ([${link.title || cleanLinkTitle}](${link.url}))\n`;
           }
         } else {
           mdContent += 'No outbound links found on this page.\n';
@@ -409,10 +410,10 @@ function triggerSummaryTask(nodeId, title, userId) {
 
 function getNeighborsData(nodeId, sourceNodes, sourceEdges, userId = null) {
   const neighbors = [];
-  const edges = sourceEdges.filter(e => e.source === nodeId);
+  const edges = (sourceEdges || []).filter(e => e.source === nodeId || e.from === nodeId);
   for (const e of edges) {
-    const targetNodeId = e.target;
-    const targetNode = sourceNodes[targetNodeId];
+    const targetNodeId = e.target || e.to;
+    const targetNode = sourceNodes ? sourceNodes[targetNodeId] : null;
     if (!targetNode) {
       neighbors.push({ nodeId: targetNodeId, title: targetNodeId });
       continue;
@@ -932,8 +933,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let existingNode = findNodeInIndex(vaultIndexData.nodes, targetIdentifier);
         const crawlUrl = url || (existingNode ? (existingNode.url || existingNode.sourceUrl) : null);
 
-        let crawledContent = "";
-        let crawledTitle = existingNode ? existingNode.title : null;
+        let crawledOutboundLinks = [];
 
         if (crawlUrl) {
           try {
@@ -943,6 +943,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               const crawled = crawlResults[0];
               crawledContent = crawled.content || "";
               crawledTitle = crawled.title || crawledTitle || "Expanded Node";
+              crawledOutboundLinks = crawled.outboundLinks || [];
             }
           } catch (err) {
             console.error(`Crawl failed in expand: ${err.message}`);
@@ -959,6 +960,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
+        if (!vaultIndexData.nodes) vaultIndexData.nodes = {};
+        if (!vaultIndexData.edges) vaultIndexData.edges = [];
+
         // Determine target Node ID
         const targetNodeId = existingNode ? existingNode.id : (nodeId || `url_${createHash('md5').update(crawlUrl).digest('hex').substring(0, 16)}`);
 
@@ -973,6 +977,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         } else {
           vaultIndexData.nodes[targetNodeId].content = crawledContent;
           if (crawledTitle) vaultIndexData.nodes[targetNodeId].title = crawledTitle;
+          if (crawlUrl) vaultIndexData.nodes[targetNodeId].url = crawlUrl;
+        }
+
+        // Process and persist 1-hop outbound links and edges
+        if (crawledOutboundLinks && crawledOutboundLinks.length > 0) {
+          for (const link of crawledOutboundLinks) {
+            if (!link.url) continue;
+            const linkUrl = link.url;
+            const linkTitle = link.title || sanitizeFilename(null, linkUrl);
+            const linkHash = createHash('md5').update(linkUrl).digest('hex').substring(0, 16);
+            const childNodeId = `url_${linkHash}`;
+
+            if (!vaultIndexData.nodes[childNodeId]) {
+              vaultIndexData.nodes[childNodeId] = {
+                id: childNodeId,
+                title: linkTitle,
+                url: linkUrl,
+                content: '',
+                summary: '等待 AI / 任务抓取中...'
+              };
+            }
+
+            const edgeExists = vaultIndexData.edges.some(
+              e => (e.source === targetNodeId || e.from === targetNodeId) && (e.target === childNodeId || e.to === childNodeId)
+            );
+            if (!edgeExists) {
+              vaultIndexData.edges.push({
+                source: targetNodeId,
+                target: childNodeId,
+                from: targetNodeId,
+                to: childNodeId
+              });
+            }
+          }
         }
 
         const node = vaultIndexData.nodes[targetNodeId];
