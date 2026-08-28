@@ -737,6 +737,7 @@ app.post('/api/chat', async (req, res) => {
     abortStream: null,
   };
   activeChatStreams.set(sessionId, streamState);
+  let done = false;
 
   res.on('close', () => {
     if (!done && !res.writableEnded) {
@@ -815,7 +816,6 @@ app.post('/api/chat', async (req, res) => {
       ...history.map((m) => ({ role: m.role, content: m.text })),
     ];
 
-    let done = false;
     let lastUsage = null;
 
     while (!done) {
