@@ -712,7 +712,7 @@ app.post('/api/chat/stop', (req, res) => {
   if (streamState) {
     streamState.isStopped = true;
     if (streamState.abortStream) {
-      try { streamState.abortStream(new Error('User stopped generation')); } catch (e) {}
+      try { streamState.abortStream(); } catch (e) {}
     }
     console.log(`🛑 [Chat] Stop requested for session: ${sessionId}`);
     return res.json({ success: true, message: 'Stop signal received' });
@@ -743,7 +743,7 @@ app.post('/api/chat', async (req, res) => {
     if (!done && !res.writableEnded) {
       streamState.isStopped = true;
       if (streamState.abortStream) {
-        try { streamState.abortStream(new Error('Client disconnected')); } catch (e) {}
+        try { streamState.abortStream(); } catch (e) {}
       }
     }
   });
@@ -827,12 +827,18 @@ app.post('/api/chat', async (req, res) => {
 
       // ── call DeepSeek with streaming + idle timeout (AGENTS.md §5.C) ──
       const streamAbort = new AbortController();
-      streamState.abortStream = (reason) => streamAbort.abort(reason);
+      streamState.abortStream = () => {
+        try { streamAbort.abort(); } catch (_) {}
+      };
 
-      let idleTimer = setTimeout(() => streamAbort.abort(new Error('SSE idle timeout: no chunk received for 30 s')), 30_000);
+      let idleTimer = setTimeout(() => {
+        try { streamAbort.abort(); } catch (_) {}
+      }, 30_000);
       const resetIdleTimer = () => {
         clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => streamAbort.abort(new Error('SSE idle timeout: no chunk received for 30 s')), 30_000);
+        idleTimer = setTimeout(() => {
+          try { streamAbort.abort(); } catch (_) {}
+        }, 30_000);
       };
 
       let resp;
@@ -940,7 +946,7 @@ app.post('/api/chat', async (req, res) => {
       } finally {
         clearTimeout(idleTimer);
         streamState.abortStream = null;
-        try { reader.cancel(); } catch { /* ignore */ }
+        try { reader.cancel().catch(() => {}); } catch { /* ignore */ }
       }
 
       if (streamState.isStopped) {
