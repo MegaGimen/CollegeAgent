@@ -47,6 +47,7 @@ const users    = new Map();
 const sessions = new Map();
 const messages = new Map();
 const _sourceRegistries = new Map();
+const activeChatStreams = new Map(); // sessionId -> { abortStream: Function|null, isStopped: boolean }
 let seqCounter = 0;
 
 // Load persisted data on startup
@@ -87,22 +88,43 @@ function saveData() {
   }, 1000);
 }
 
-function pushMsg(sessionId, role, text, meta) {
+function pushMsg(sessionId, role, text, meta, userId) {
   if (!messages.has(sessionId)) messages.set(sessionId, []);
   const arr = messages.get(sessionId);
+  const now = new Date().toISOString();
   const msg = {
     id: uuidv4(),
     sessionId,
     role,
     text,
-    timestamp: new Date().toISOString(),
+    timestamp: now,
     seq: ++seqCounter,
   };
   if (meta) msg.meta = meta;
   arr.push(msg);
-  const s = sessions.get(sessionId);
-  if (s) {
-    s.lastActive = msg.timestamp;
+  let s = sessions.get(sessionId);
+  if (!s) {
+    // Session metadata was lost (e.g. deleted while async tool chain was still running).
+    // Auto-recover: rebuild a minimal session entry so the message is never truly orphaned.
+    const resolvedUserId = userId
+      || arr.find(m => m.role === 'user')?.userId
+      || (meta?.toolCalls?.[0]?.args?.userId)
+      || 'unknown';
+    console.warn(`[pushMsg] Session ${sessionId} not found in index — auto-recovering orphaned session for user ${resolvedUserId}`);
+    s = {
+      id: sessionId,
+      sessionId,
+      userId: resolvedUserId,
+      title: text.slice(0, 50) || 'Recovered Session',
+      createdAt: arr[0]?.timestamp || now,
+      lastActive: now,
+      lastMessage: text.slice(0, 120),
+      latestAssistant: role === 'assistant' ? text.slice(0, 120) : null,
+      msgCount: arr.length,
+    };
+    sessions.set(sessionId, s);
+  } else {
+    s.lastActive = now;
     s.lastMessage = text.slice(0, 120);
     s.msgCount = arr.length;
     if (role === 'assistant') s.latestAssistant = text.slice(0, 120);
@@ -679,6 +701,25 @@ app.get('/api/messages', (req, res) => {
   res.json(messages.get(sessionId) || []);
 });
 
+// ── POST /api/chat/stop  (Stop current generating session) ───────────────────
+
+app.post('/api/chat/stop', (req, res) => {
+  const { sessionId } = req.body;
+  if (!sessionId) {
+    return res.status(400).json({ error: 'sessionId required' });
+  }
+  const streamState = activeChatStreams.get(sessionId);
+  if (streamState) {
+    streamState.isStopped = true;
+    if (streamState.abortStream) {
+      try { streamState.abortStream(new Error('User stopped generation')); } catch (e) {}
+    }
+    console.log(`🛑 [Chat] Stop requested for session: ${sessionId}`);
+    return res.json({ success: true, message: 'Stop signal received' });
+  }
+  res.json({ success: true, message: 'No active stream found' });
+});
+
 // ── POST /api/chat  (SSE streaming) ──────────────────────────────────────────
 
 app.post('/api/chat', async (req, res) => {
@@ -690,8 +731,22 @@ app.post('/api/chat', async (req, res) => {
     return res.status(404).json({ error: 'session not found' });
   }
 
+  // Track active stream state for stop requests
+  const streamState = {
+    isStopped: false,
+    abortStream: null,
+  };
+  activeChatStreams.set(sessionId, streamState);
+
+  req.on('close', () => {
+    streamState.isStopped = true;
+    if (streamState.abortStream) {
+      try { streamState.abortStream(new Error('Client disconnected')); } catch (e) {}
+    }
+  });
+
   // save user message
-  pushMsg(sessionId, 'user', text);
+  pushMsg(sessionId, 'user', text, null, userId);
 
   // Auto-generate title for first message in session
   const sessMsgs = messages.get(sessionId) || [];
@@ -707,7 +762,16 @@ app.post('/api/chat', async (req, res) => {
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
+  let assistantText = '';
+  // Collect all tool calls + intermediate texts for persistence
+  const allToolCalls = [];  // { name, args, result, intermediateText }
+  // Collect web_search results as citable sources (legacy fallback)
+  const citationSources = [];  // { title, url, description, snippet }
+
   try {
+    // Immediately send a thinking indicator so the UI doesn't look dead during async operations like memory fetching
+    sseEvent(res, 'token', { content: '🤔 正在思考中...\n\n' });
+
     // build message array with memory injected into system prompt
     const history = messages.get(sessionId) || [];
     const memoryContent = (await mcpManager.getMemory(userId)) || '';
@@ -740,7 +804,7 @@ app.post('/api/chat', async (req, res) => {
           if (s.rawMeta) return `[${s.id}] ` + JSON.stringify(s.rawMeta);
           return `[${s.id}] ${s.title}`;
         }).join('\n') + 
-        '\n\n*Note: Every factual claim MUST be cited with the source ID and EXACT line numbers (e.g., [1, 45-62] or [2, 12]). Bare citations without line numbers like [1] or [2] are strictly forbidden.*';
+        '\n\n*Note: Every factual claim MUST be cited with the numeric source ID and EXACT line numbers (e.g., [1, 45-62] or [2, 12]). Text aliases like [syllabus 103] or [BIO, 36] and bare citations like [1] are strictly forbidden. The first value in brackets MUST be the numeric ID (e.g. [1, 103]).*';
     }
 
     const fullSystemPrompt = SYSTEM_PROMPT + '\n\n## Current User Time\n\n' + userTimeStr + '\n\n## Current User Memory\n\n' + memoryContent + routingTableText;
@@ -749,36 +813,57 @@ app.post('/api/chat', async (req, res) => {
       ...history.map((m) => ({ role: m.role, content: m.text })),
     ];
 
-    let assistantText = '';
     let done = false;
     let lastUsage = null;
 
-    // Immediately send a thinking indicator so the UI doesn't look dead during TTFT
-    sseEvent(res, 'token', { content: '🤔 正在思考中...\n\n' });
-
-    // Collect all tool calls + intermediate texts for persistence
-    const allToolCalls = [];  // { name, args, result, intermediateText }
-    // Collect web_search results as citable sources (legacy fallback)
-    const citationSources = [];  // { title, url, description, snippet }
-
     while (!done) {
-      // ── call DeepSeek with streaming ──
-      const resp = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: DEEPSEEK_MODEL,
-          messages: apiMessages,
-          tools: mcpManager.getAllTools(),
-          stream: true,
-          stream_options: { include_usage: true },
-        }),
-      });
+      if (streamState.isStopped) {
+        console.log(`🛑 [Chat] Session ${sessionId} stopped by user before LLM call.`);
+        done = true;
+        break;
+      }
+
+      // ── call DeepSeek with streaming + idle timeout (AGENTS.md §5.C) ──
+      const streamAbort = new AbortController();
+      streamState.abortStream = (reason) => streamAbort.abort(reason);
+
+      let idleTimer = setTimeout(() => streamAbort.abort(new Error('SSE idle timeout: no chunk received for 30 s')), 30_000);
+      const resetIdleTimer = () => {
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => streamAbort.abort(new Error('SSE idle timeout: no chunk received for 30 s')), 30_000);
+      };
+
+      let resp;
+      try {
+        resp = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: DEEPSEEK_MODEL,
+            messages: apiMessages,
+            tools: mcpManager.getAllTools(),
+            stream: true,
+            stream_options: { include_usage: true },
+          }),
+          signal: streamAbort.signal,
+        });
+      } catch (err) {
+        clearTimeout(idleTimer);
+        streamState.abortStream = null;
+        if (streamState.isStopped || streamAbort.signal.aborted) {
+          console.log(`🛑 [Chat] DeepSeek fetch aborted for session ${sessionId}`);
+          done = true;
+          break;
+        }
+        throw err;
+      }
 
       if (!resp.ok) {
+        clearTimeout(idleTimer);
+        streamState.abortStream = null;
         const errBody = await resp.text();
         throw new Error(`DeepSeek ${resp.status}: ${errBody}`);
       }
@@ -791,54 +876,75 @@ app.post('/api/chat', async (req, res) => {
       let toolCallsMap = {};          // index → { id, type, function: { name, arguments } }
       let finishReason = null;
 
-      while (true) {
-        const { value, done: rDone } = await reader.read();
-        if (rDone) break;
-        buf += dec.decode(value, { stream: true });
+      try {
+        while (true) {
+          const { value, done: rDone } = await reader.read();
+          if (rDone) break;
+          resetIdleTimer();
+          buf += dec.decode(value, { stream: true });
 
-        const parts = buf.split('\n\n');
-        buf = parts.pop() || '';
+          const parts = buf.split('\n\n');
+          buf = parts.pop() || '';
 
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith('data: ')) continue;
-          const payload = line.slice(6);
-          if (payload === '[DONE]') continue;
-          try {
-            const json = JSON.parse(payload);
-            if (json.usage) {
-              lastUsage = json.usage;
-            }
-            const choice = json.choices?.[0];
-            if (!choice) continue;
-            const delta = choice.delta;
-
-            // collect text content
-            if (delta?.content) {
-              streamContent += delta.content;
-              sseEvent(res, 'token', { content: delta.content });
-            }
-
-            // collect tool_calls deltas
-            if (delta?.tool_calls) {
-              for (const tc of delta.tool_calls) {
-                const idx = tc.index;
-                if (!toolCallsMap[idx]) {
-                  toolCallsMap[idx] = {
-                    id: tc.id || '',
-                    type: tc.type || 'function',
-                    function: { name: '', arguments: '' },
-                  };
-                }
-                if (tc.id) toolCallsMap[idx].id = tc.id;
-                if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name;
-                if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments;
+          for (const part of parts) {
+            const line = part.trim();
+            if (!line.startsWith('data: ')) continue;
+            const payload = line.slice(6);
+            if (payload === '[DONE]') continue;
+            try {
+              const json = JSON.parse(payload);
+              if (json.usage) {
+                lastUsage = json.usage;
               }
-            }
+              const choice = json.choices?.[0];
+              if (!choice) continue;
+              const delta = choice.delta;
 
-            if (choice.finish_reason) finishReason = choice.finish_reason;
-          } catch { /* skip malformed chunk */ }
+              // collect text content
+              if (delta?.content) {
+                streamContent += delta.content;
+                sseEvent(res, 'token', { content: delta.content });
+              }
+
+              // collect tool_calls deltas
+              if (delta?.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index;
+                  if (!toolCallsMap[idx]) {
+                    toolCallsMap[idx] = {
+                      id: tc.id || '',
+                      type: tc.type || 'function',
+                      function: { name: '', arguments: '' },
+                    };
+                  }
+                  if (tc.id) toolCallsMap[idx].id = tc.id;
+                  if (tc.function?.name) toolCallsMap[idx].function.name += tc.function.name;
+                  if (tc.function?.arguments) toolCallsMap[idx].function.arguments += tc.function.arguments;
+                }
+              }
+
+              if (choice.finish_reason) finishReason = choice.finish_reason;
+            } catch { /* skip malformed chunk */ }
+          }
         }
+      } catch (err) {
+        if (streamState.isStopped || streamAbort.signal.aborted) {
+          console.log(`🛑 [Chat] Stream reader aborted for session ${sessionId}`);
+          assistantText = streamContent;
+          done = true;
+          break;
+        }
+        throw err;
+      } finally {
+        clearTimeout(idleTimer);
+        streamState.abortStream = null;
+        try { reader.cancel(); } catch { /* ignore */ }
+      }
+
+      if (streamState.isStopped) {
+        assistantText = streamContent;
+        done = true;
+        break;
       }
 
       // ── handle tool calls ──
@@ -1121,6 +1227,13 @@ app.post('/api/chat', async (req, res) => {
           });
         }
 
+        // Check if user requested stop while tools were executing
+        if (streamState.isStopped) {
+          console.log(`🛑 [Chat] Session ${sessionId} stopped after tool execution finished. Aborting further replies.`);
+          done = true;
+          break;
+        }
+
         // reset and loop for the next response
         assistantText = '';
       } else {
@@ -1158,38 +1271,75 @@ app.post('/api/chat', async (req, res) => {
     if (resolvedCitations.length > 0) meta.citations = resolvedCitations;
     if (citationSources.length > 0) meta.citationSources = citationSources;
     const hasMeta = Object.keys(meta).length > 0;
-    pushMsg(sessionId, 'assistant', assistantText, hasMeta ? meta : null);
+    pushMsg(sessionId, 'assistant', assistantText, hasMeta ? meta : null, userId);
     sseEvent(res, 'done', { messageId: uuidv4(), text: assistantText });
-    res.end();
+    if (!res.writableEnded) res.end();
   } catch (e) {
     console.error('Chat error:', e);
+    
+    // Save any partial state so we don't end up with an orphaned user message and no response
+    if (assistantText || allToolCalls.length > 0) {
+      const meta = {};
+      if (allToolCalls.length > 0) meta.toolCalls = allToolCalls;
+      if (citationSources.length > 0) meta.citationSources = citationSources;
+      meta.error = e.message;
+      pushMsg(sessionId, 'assistant', assistantText || '[Error occurred during generation]', Object.keys(meta).length > 0 ? meta : null, userId);
+    }
+    
     sseEvent(res, 'error', { message: e.message });
-    res.end();
+    if (!res.writableEnded) res.end();
+  } finally {
+    activeChatStreams.delete(sessionId);
   }
 });
 
 // ── GET /api/graph/node/:nodeId ──────────────────────────────────────────────
 
-app.get('/api/graph/node/:nodeId', async (req, res) => {
-  const { nodeId } = req.params;
+app.get('/api/graph/node/:nodeId(*)?', async (req, res) => {
+  const rawNodeId = req.params.nodeId || req.query.nodeId || req.query.id || '';
+  const nodeId = decodeURIComponent(rawNodeId);
+  if (!nodeId) {
+    return res.status(400).json({ error: 'nodeId required' });
+  }
+
   try {
     let nodeData = null;
 
-    // 1. Check in-memory _sourceRegistry first (by numeric id or string nodeId/title)
-    const regSource = _sourceRegistry.find(s => 
-      String(s.id) === String(nodeId) || 
-      s.nodeId === nodeId ||
-      (s.title && s.title.toLowerCase() === nodeId.toLowerCase())
-    );
+    // 1. Check in-memory _sourceRegistries first (by numeric id or string nodeId/title)
+    let regSource = null;
+    for (const sess of _sourceRegistries.values()) {
+      if (Array.isArray(sess.registry)) {
+        const found = sess.registry.find(s => 
+          String(s.id) === String(nodeId) || 
+          s.nodeId === nodeId ||
+          (s.title && s.title.toLowerCase() === nodeId.toLowerCase())
+        );
+        if (found) {
+          regSource = found;
+          break;
+        }
+      }
+    }
+
     if (regSource && regSource.fullContent) {
       const nodeMeta = parseNodeMeta(regSource.fullContent);
+      let links = [];
+      if (regSource.rawMeta?.outboundLinks && Array.isArray(regSource.rawMeta.outboundLinks)) {
+        links = regSource.rawMeta.outboundLinks;
+      } else if (regSource.rawMeta?.neighbors && Array.isArray(regSource.rawMeta.neighbors)) {
+        links = regSource.rawMeta.neighbors;
+      }
       nodeData = {
         nodeId: regSource.nodeId || String(regSource.id),
         title: regSource.title || '',
         content: regSource.fullContent,
         sourceUrl: regSource.sourceUrl || nodeMeta.sourceUrl,
         crawledAt: regSource.crawledAt || nodeMeta.crawledAt,
-        outboundLinks: [],
+        outboundLinks: links.map(l => ({
+          nodeId: l.nodeId || l.id || null,
+          title: l.title || l.display || 'Link',
+          url: l.url || l.sourceUrl || null,
+        })),
       };
     }
 
@@ -1202,28 +1352,90 @@ app.get('/api/graph/node/:nodeId', async (req, res) => {
           const indexPath = path.join(vaultsDir, uDir, 'index.json');
           if (existsSync(indexPath)) {
             const privateIndex = JSON.parse(await fsPromises.readFile(indexPath, 'utf-8'));
+            if (privateIndex.nodes) {
+              let targetId = nodeId;
+              if (!privateIndex.nodes[targetId]) {
+                targetId = Object.keys(privateIndex.nodes).find(k => 
+                  k === nodeId || 
+                  k.toLowerCase() === nodeId.toLowerCase() ||
+                  privateIndex.nodes[k].title?.toLowerCase() === nodeId.toLowerCase() ||
+                  (regSource && (privateIndex.nodes[k].title?.toLowerCase() === regSource.title?.toLowerCase() || k === regSource.nodeId))
+                );
+              }
+
+              if (targetId && privateIndex.nodes[targetId]) {
+                const pNode = privateIndex.nodes[targetId];
+                const edges = privateIndex.edges || [];
+                const outbound = edges
+                  .filter(e => e.source === targetId)
+                  .map(e => {
+                    const t = privateIndex.nodes[e.target];
+                    return { nodeId: e.target, title: t?.title || 'Link', url: t?.url };
+                  });
+                const inbound = edges
+                  .filter(e => e.target === targetId)
+                  .map(e => {
+                    const s = privateIndex.nodes[e.source];
+                    return { nodeId: e.source, title: s?.title || 'Link', url: s?.url };
+                  });
+
+                const allLinksMap = new Map();
+                for (const link of [...outbound, ...inbound]) {
+                  if (link.nodeId && !allLinksMap.has(link.nodeId)) {
+                    allLinksMap.set(link.nodeId, link);
+                  }
+                }
+                const combinedLinks = Array.from(allLinksMap.values());
+                const nodeMeta = parseNodeMeta(pNode.content || '');
+
+                nodeData = {
+                  nodeId: pNode.id || targetId,
+                  title: pNode.title || nodeData?.title || '',
+                  content: pNode.content || nodeData?.content || '',
+                  sourceUrl: pNode.url || nodeMeta.sourceUrl || nodeData?.sourceUrl,
+                  crawledAt: nodeMeta.crawledAt || nodeData?.crawledAt || null,
+                  outboundLinks: combinedLinks.length > 0 ? combinedLinks : (nodeData?.outboundLinks || []),
+                };
+                break;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error searching private vaults:', e.message);
+    }
+
+    // 3. Check public index
+    try {
+      if (!nodeData || !nodeData.outboundLinks || nodeData.outboundLinks.length === 0) {
+        const pubIndexPath = path.join(__dirname, '../networker/MCP/index.json');
+        if (existsSync(pubIndexPath)) {
+          const pubIndex = JSON.parse(await fsPromises.readFile(pubIndexPath, 'utf-8'));
+          if (pubIndex.nodes) {
             let targetId = nodeId;
-            if (!privateIndex.nodes[targetId]) {
-              targetId = Object.keys(privateIndex.nodes).find(k => 
+            if (!pubIndex.nodes[targetId]) {
+              targetId = Object.keys(pubIndex.nodes).find(k => 
                 k === nodeId || 
-                privateIndex.nodes[k].title?.toLowerCase() === nodeId.toLowerCase() ||
-                (regSource && privateIndex.nodes[k].title?.toLowerCase() === regSource.title?.toLowerCase())
+                k.toLowerCase() === nodeId.toLowerCase() ||
+                pubIndex.nodes[k].title?.toLowerCase() === nodeId.toLowerCase() ||
+                (regSource && (pubIndex.nodes[k].title?.toLowerCase() === regSource.title?.toLowerCase() || k === regSource.nodeId))
               );
             }
 
-            if (targetId && privateIndex.nodes[targetId]) {
-              const pNode = privateIndex.nodes[targetId];
-              const edges = privateIndex.edges || [];
+            if (targetId && pubIndex.nodes[targetId]) {
+              const pNode = pubIndex.nodes[targetId];
+              const edges = pubIndex.edges || [];
               const outbound = edges
                 .filter(e => e.source === targetId)
                 .map(e => {
-                  const t = privateIndex.nodes[e.target];
+                  const t = pubIndex.nodes[e.target];
                   return { nodeId: e.target, title: t?.title || 'Link', url: t?.url };
                 });
               const inbound = edges
                 .filter(e => e.target === targetId)
                 .map(e => {
-                  const s = privateIndex.nodes[e.source];
+                  const s = pubIndex.nodes[e.source];
                   return { nodeId: e.source, title: s?.title || 'Link', url: s?.url };
                 });
 
@@ -1234,25 +1446,25 @@ app.get('/api/graph/node/:nodeId', async (req, res) => {
                 }
               }
               const combinedLinks = Array.from(allLinksMap.values());
+              const nodeMeta = parseNodeMeta(pNode.content || '');
 
               nodeData = {
                 nodeId: pNode.id || targetId,
                 title: pNode.title || nodeData?.title || '',
                 content: pNode.content || nodeData?.content || '',
-                sourceUrl: pNode.url || nodeData?.sourceUrl,
-                crawledAt: nodeData?.crawledAt || null,
+                sourceUrl: pNode.url || nodeMeta.sourceUrl || nodeData?.sourceUrl,
+                crawledAt: nodeMeta.crawledAt || nodeData?.crawledAt || null,
                 outboundLinks: combinedLinks.length > 0 ? combinedLinks : (nodeData?.outboundLinks || []),
               };
-              break;
             }
           }
         }
       }
     } catch (e) {
-      console.error('Error searching private vaults:', e.message);
+      console.error('Error searching public index:', e.message);
     }
 
-    // 3. Fallback to Networker MCP callTool('read', { nodeId })
+    // 4. Fallback to Networker MCP callTool('read', { nodeId })
     if (!nodeData) {
       let result = await mcpManager.callTool('read', { nodeId });
       if (!result && (nodeId.startsWith('http://') || nodeId.startsWith('https://'))) {
@@ -1263,17 +1475,38 @@ app.get('/api/graph/node/:nodeId', async (req, res) => {
       }
 
       if (result) {
-        const parsed = JSON.parse(result);
-        const rawContent = parsed.content || '';
-        const nodeMeta = parseNodeMeta(rawContent);
-        nodeData = {
-          nodeId: parsed.nodeId || nodeId,
-          title: parsed.title || '',
-          content: rawContent,
-          sourceUrl: nodeMeta.sourceUrl,
-          crawledAt: nodeMeta.crawledAt,
-          outboundLinks: parsed.outboundLinks || [],
-        };
+        try {
+          const parsed = JSON.parse(result);
+          const rawContent = parsed.content || '';
+          const nodeMeta = parseNodeMeta(rawContent);
+          const outbound = [];
+          if (parsed.neighbors && Array.isArray(parsed.neighbors)) {
+            for (const n of parsed.neighbors) {
+              outbound.push({
+                nodeId: n.nodeId || n.id,
+                title: n.title || 'Link',
+                url: n.sourceUrl || n.url,
+              });
+            }
+          }
+          if (parsed.outboundLinks && Array.isArray(parsed.outboundLinks)) {
+            for (const l of parsed.outboundLinks) {
+              outbound.push({
+                nodeId: l.nodeId || l.id,
+                title: l.title || 'Link',
+                url: l.url || l.sourceUrl,
+              });
+            }
+          }
+          nodeData = {
+            nodeId: parsed.nodeId || nodeId,
+            title: parsed.title || '',
+            content: rawContent,
+            sourceUrl: nodeMeta.sourceUrl,
+            crawledAt: nodeMeta.crawledAt,
+            outboundLinks: outbound,
+          };
+        } catch (_) {}
       }
     }
 

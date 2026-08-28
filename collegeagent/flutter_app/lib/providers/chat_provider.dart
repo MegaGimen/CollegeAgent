@@ -379,7 +379,7 @@ class ChatProvider extends ChangeNotifier {
           _sessionMessages[targetSessionId] = updated;
           notifyListeners();
         },
-        onError: (error) {
+        onError: (error) async {
           _throttleTimers[targetSessionId]?.cancel();
           _throttleTimers.remove(targetSessionId);
           _streamingSessions.remove(targetSessionId);
@@ -392,6 +392,18 @@ class ChatProvider extends ChangeNotifier {
             _error = error;
           }
           notifyListeners();
+          
+          // Refetch from server to sync persisted partial state (e.g. user msg, partial tool calls)
+          try {
+            final remote = await api.getMessages(targetSessionId);
+            await localDb.clearSessionMessages(targetSessionId);
+            await localDb.insertMessages(remote);
+            _sessionMessages[targetSessionId] = remote;
+            if (_sessionId == targetSessionId) {
+              _lastReadCounts[targetSessionId] = remote.length;
+            }
+            notifyListeners();
+          } catch (_) {}
         },
       );
 
@@ -413,7 +425,57 @@ class ChatProvider extends ChangeNotifier {
         _error = e.toString();
       }
       notifyListeners();
+      
+      try {
+        final remote = await api.getMessages(targetSessionId);
+        await localDb.clearSessionMessages(targetSessionId);
+        await localDb.insertMessages(remote);
+        _sessionMessages[targetSessionId] = remote;
+        if (_sessionId == targetSessionId) {
+          _lastReadCounts[targetSessionId] = remote.length;
+        }
+        notifyListeners();
+      } catch (_) {}
     }
+  }
+
+  /// Immediately stops active streaming generation for a session.
+  Future<void> stopStreaming([String? sid]) async {
+    final targetSessionId = sid ?? _sessionId;
+    if (targetSessionId == null) return;
+
+    // 1. Trigger local stream cancellation
+    if (_cancelFuncs.containsKey(targetSessionId)) {
+      try {
+        _cancelFuncs[targetSessionId]?.call();
+      } catch (_) {}
+      _cancelFuncs.remove(targetSessionId);
+    }
+
+    // 2. Notify backend to abort DeepSeek stream or finish after running tools
+    try {
+      await api.stopChat(targetSessionId);
+    } catch (_) {}
+
+    // 3. Clear buffers and state
+    _throttleTimers[targetSessionId]?.cancel();
+    _throttleTimers.remove(targetSessionId);
+    _pendingTokens.remove(targetSessionId);
+    _pendingAssistantIds.remove(targetSessionId);
+    _streamingSessions.remove(targetSessionId);
+    notifyListeners();
+
+    // 4. Refetch messages from server to sync final state
+    try {
+      final remote = await api.getMessages(targetSessionId);
+      await localDb.clearSessionMessages(targetSessionId);
+      await localDb.insertMessages(remote);
+      _sessionMessages[targetSessionId] = remote;
+      if (_sessionId == targetSessionId) {
+        _lastReadCounts[targetSessionId] = remote.length;
+      }
+      notifyListeners();
+    } catch (_) {}
   }
 
   // ── Rollback ────────────────────────────────────────────────────────────────

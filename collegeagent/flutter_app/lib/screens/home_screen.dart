@@ -9,6 +9,7 @@ import '../models/user.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/session_provider.dart';
+import '../providers/theme_provider.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/session_tile.dart';
@@ -166,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
                 },
                 onNewChat: () {
-                  _createNewSession();
+                  _clearSelection();
                   if (Navigator.of(context).canPop()) {
                     Navigator.of(context).pop();
                   }
@@ -196,12 +197,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           onCloseSidebar: () {
                             setState(() => _desktopSidebarOpen = false);
                           },
-                          onNewChat: _createNewSession,
+                          onNewChat: _clearSelection,
                           onSelectSession: _selectSession,
                           onLoadSessions: _refreshSessions,
                         ),
                       ),
-                      const VerticalDivider(width: 1),
+                      VerticalDivider(
+                        width: 1,
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF1E4E79)
+                            : Colors.grey.shade300,
+                      ),
                     ],
                     Expanded(
                       child: _buildMainContent(chat, sessionProv, auth, user),
@@ -347,8 +353,10 @@ class _SessionSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      color: const Color(0xFFF8F9FA),
+      color: isDark ? const Color(0xFF081226) : const Color(0xFFF8F9FA),
       child: SafeArea(
         top: true,
         bottom: true,
@@ -360,22 +368,23 @@ class _SessionSidebar extends StatelessWidget {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.menu_open, size: 20),
+                    icon: Icon(Icons.menu_open, size: 20, color: isDark ? Colors.white70 : Colors.black87),
                     tooltip: isDesktop ? 'Collapse sidebar' : 'Close sidebar',
                     onPressed: onCloseSidebar,
                   ),
                   const SizedBox(width: 4),
-                  const Text(
-                    'CollegeAgent',
+                  Text(
+                    'ICE Agent',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF6C63FF),
+                      color: isDark ? Colors.white : const Color(0xFF0C132C),
                     ),
                   ),
                   const Spacer(),
+                  const _ThemeSwitchButton(),
                   IconButton(
-                    icon: const Icon(Icons.upload_file_outlined, size: 20),
+                    icon: Icon(Icons.upload_file_outlined, size: 20, color: isDark ? Colors.white70 : Colors.black54),
                     tooltip: 'Personal Vault',
                     onPressed: () {
                       if (user != null) {
@@ -389,7 +398,7 @@ class _SessionSidebar extends StatelessWidget {
                     },
                   ),
                   PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert, size: 20, color: Colors.black54),
+                    icon: Icon(Icons.more_vert, size: 20, color: isDark ? Colors.white70 : Colors.black54),
                     tooltip: 'More options',
                     onSelected: (value) {
                       if (user == null) return;
@@ -404,36 +413,36 @@ class _SessionSidebar extends StatelessWidget {
                       }
                     },
                     itemBuilder: (BuildContext context) => [
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         value: 'calendar',
                         child: Row(children: [
-                          const Icon(Icons.calendar_month_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Google Calendar')
+                          Icon(Icons.calendar_month_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Google Calendar')
                         ]),
                       ),
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         value: 'gmail',
                         child: Row(children: [
-                          const Icon(Icons.email_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Gmail')
+                          Icon(Icons.email_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Gmail')
                         ]),
                       ),
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         value: 'canvas',
                         child: Row(children: [
-                          const Icon(Icons.school_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Canvas Courses')
+                          Icon(Icons.school_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Canvas Courses')
                         ]),
                       ),
-                      PopupMenuItem(
+                      const PopupMenuItem(
                         value: 'memory',
                         child: Row(children: [
-                          const Icon(Icons.memory_outlined, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Memory')
+                          Icon(Icons.memory_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Memory')
                         ]),
                       ),
                       const PopupMenuDivider(),
@@ -444,10 +453,10 @@ class _SessionSidebar extends StatelessWidget {
                             context.read<AuthProvider>().logout();
                           });
                         },
-                        child: Row(children: [
-                          const Icon(Icons.logout, size: 18),
-                          const SizedBox(width: 8),
-                          const Text('Logout')
+                        child: const Row(children: [
+                          Icon(Icons.logout, size: 18),
+                          SizedBox(width: 8),
+                          Text('Logout')
                         ]),
                       ),
                     ],
@@ -465,17 +474,23 @@ class _SessionSidebar extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
+                    color: isDark ? const Color(0xFF01385F) : Colors.transparent,
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.edit_outlined, size: 18),
+                      Icon(Icons.edit_outlined, size: 18, color: isDark ? Colors.white : Colors.black87),
                       const SizedBox(width: 10),
-                      const Text('New chat',
-                          style: TextStyle(fontWeight: FontWeight.w500)),
+                      Text('New chat',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: isDark ? Colors.white : Colors.black87,
+                          )),
                       const Spacer(),
-                      Icon(Icons.add, size: 18, color: Colors.grey.shade600),
+                      Icon(Icons.add, size: 18, color: isDark ? Colors.white70 : Colors.grey.shade600),
                     ],
                   ),
                 ),
@@ -492,7 +507,7 @@ class _SessionSidebar extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600,
+                    color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade600,
                   ),
                 ),
               ),
@@ -504,7 +519,7 @@ class _SessionSidebar extends StatelessWidget {
                   ? Center(
                       child: Text(
                         'No chats yet',
-                        style: TextStyle(color: Colors.grey.shade400),
+                        style: TextStyle(color: isDark ? const Color(0xFF64748B) : Colors.grey.shade400),
                       ),
                     )
                   : RefreshIndicator(
@@ -553,13 +568,17 @@ class _SessionSidebar extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade200,
+                  ),
+                ),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 16,
-                    backgroundColor: const Color(0xFF6C63FF),
+                    backgroundColor: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
                     child: Text(
                       username.isNotEmpty ? username[0].toUpperCase() : 'U',
                       style: const TextStyle(color: Colors.white, fontSize: 14),
@@ -571,12 +590,15 @@ class _SessionSidebar extends StatelessWidget {
                       username,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
                     ),
                   ),
                   PopupMenuButton<String>(
                     icon: Icon(Icons.settings_outlined,
-                        size: 18, color: Colors.grey.shade600),
+                        size: 18, color: isDark ? Colors.white70 : Colors.grey.shade600),
                     onSelected: (v) {
                       if (v == 'logout') context.read<AuthProvider>().logout();
                     },
@@ -585,7 +607,7 @@ class _SessionSidebar extends StatelessWidget {
                         value: 'logout',
                         child: Row(children: [
                           Icon(Icons.logout,
-                              size: 18, color: Colors.grey.shade600),
+                              size: 18, color: isDark ? Colors.white70 : Colors.grey.shade600),
                           const SizedBox(width: 8),
                           const Text('Logout'),
                         ]),
@@ -621,12 +643,16 @@ class _WelcomeView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFEEF0FF), Colors.white],
+          colors: isDark
+              ? [const Color(0xFF0C132C), const Color(0xFF060B1A)]
+              : [const Color(0xFFEDEFF5), Colors.white],
         ),
       ),
       child: SafeArea(
@@ -638,11 +664,12 @@ class _WelcomeView extends StatelessWidget {
                 children: [
                   if (!isDesktop || !desktopSidebarOpen)
                     IconButton(
-                      icon: const Icon(Icons.menu),
+                      icon: Icon(Icons.menu, color: isDark ? Colors.white70 : Colors.black87),
                       tooltip: 'Open sidebar',
                       onPressed: onToggleSidebar,
                     ),
                   const Spacer(),
+                  const _ThemeSwitchButton(),
                 ],
               ),
             ),
@@ -654,13 +681,33 @@ class _WelcomeView extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'Hi $username,\nwhat can I help with?',
+                        'ICE agent',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 32,
+                        style: TextStyle(
+                          fontSize: 34,
                           fontWeight: FontWeight.bold,
-                          height: 1.3,
-                          color: Color(0xFF1A1A2E),
+                          letterSpacing: -0.5,
+                          color: isDark ? Colors.white : const Color(0xFF0C132C),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Ideal College Education Agent',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Welcome $username',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0C132C),
                         ),
                       ),
                       const SizedBox(height: 40),
@@ -672,8 +719,9 @@ class _WelcomeView extends StatelessWidget {
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          backgroundColor: const Color(0xFF6C63FF),
+                          backgroundColor: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
                           foregroundColor: Colors.white,
+                          side: isDark ? const BorderSide(color: Color(0xFF1E4E79)) : null,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
                         icon: const Icon(Icons.school_outlined, size: 20),
@@ -735,13 +783,16 @@ class _WelcomeInputState extends State<_WelcomeInput> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? const Color(0xFF01385F) : Colors.white,
         borderRadius: BorderRadius.circular(28),
+        border: isDark ? Border.all(color: const Color(0xFF1E4E79)) : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: isDark ? Colors.black.withValues(alpha: 0.3) : Colors.black.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -757,16 +808,19 @@ class _WelcomeInputState extends State<_WelcomeInput> {
               child: TextField(
                 controller: _controller,
                 focusNode: _focusNode,
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                 maxLines: 4,
                 minLines: 1,
                 textInputAction: TextInputAction.newline,
                 decoration: InputDecoration(
-                hintText: 'Ask anything...',
-                hintStyle: TextStyle(color: Colors.grey.shade400),
-                border: InputBorder.none,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              ),
+                  hintText: 'Ask anything...',
+                  hintStyle: TextStyle(
+                    color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade400,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                ),
               ),
             ),
           ),
@@ -774,7 +828,7 @@ class _WelcomeInputState extends State<_WelcomeInput> {
             padding: const EdgeInsets.only(right: 8),
             child: CircleAvatar(
               radius: 20,
-              backgroundColor: const Color(0xFF6C63FF),
+              backgroundColor: isDark ? const Color(0xFF2196F3) : const Color(0xFF0C132C),
               child: IconButton(
                 icon: const Icon(Icons.send, size: 18, color: Colors.white),
                 onPressed: _submit,
@@ -851,15 +905,38 @@ class _ChatViewState extends State<_ChatView> {
   }
 
   void _showRenameDialog(SessionModel tab) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final ctrl = TextEditingController(text: tab.title ?? '');
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename Tab'),
+        backgroundColor: isDark ? const Color(0xFF081226) : Colors.white,
+        title: Text(
+          'Rename Tab',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          decoration: const InputDecoration(hintText: 'Enter new name'),
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+          decoration: InputDecoration(
+            hintText: 'Enter new name',
+            hintStyle: TextStyle(color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500),
+            filled: true,
+            fillColor: isDark ? const Color(0xFF01385F) : Colors.grey.shade100,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300),
+            ),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: BorderRadius.all(Radius.circular(8)),
+              borderSide: BorderSide(color: Color(0xFF38BDF8)),
+            ),
+          ),
           onSubmitted: (val) {
             Navigator.pop(ctx);
             if (val.trim().isNotEmpty) {
@@ -870,9 +947,16 @@ class _ChatViewState extends State<_ChatView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade700),
+            ),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2196F3),
+              foregroundColor: Colors.white,
+            ),
             onPressed: () {
               Navigator.pop(ctx);
               if (ctrl.text.trim().isNotEmpty) {
@@ -1033,14 +1117,12 @@ class _ChatViewState extends State<_ChatView> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final chat = context.watch<ChatProvider>();
-    final title = widget.session.title ?? 'Chat';
-
-    // Read messages for THIS specific session — never the global chat.messages
-    // which depends on the mutable _sessionId and can leak across sessions.
     final sessionMessages = chat.getMessagesForSession(widget.session.id);
     final isLoading = chat.isLoadingSession(widget.session.id);
     final isStreaming = chat.isStreaming(widget.session.id);
+    final title = widget.session.title ?? 'Chat';
 
     if (chat.memoryChanged) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1069,8 +1151,8 @@ class _ChatViewState extends State<_ChatView> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            color: isDark ? const Color(0xFF081226) : Colors.white,
+            border: Border(bottom: BorderSide(color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade200)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1090,7 +1172,9 @@ class _ChatViewState extends State<_ChatView> {
                     child: Padding(
                       padding: const EdgeInsets.only(right: 4, bottom: 4),
                       child: Material(
-                        color: isSelected ? Colors.grey.shade200 : Colors.transparent,
+                        color: isSelected
+                            ? (isDark ? const Color(0xFF01385F) : Colors.grey.shade200)
+                            : Colors.transparent,
                         borderRadius: BorderRadius.circular(8),
                         child: InkWell(
                           onTap: () => widget.onTabSelected(tab),
@@ -1100,7 +1184,11 @@ class _ChatViewState extends State<_ChatView> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(
+                                color: isSelected
+                                    ? (isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300)
+                                    : (isDark ? const Color(0xFF162D4A) : Colors.grey.shade200),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Row(
@@ -1113,6 +1201,9 @@ class _ChatViewState extends State<_ChatView> {
                                     style: TextStyle(
                                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                       fontSize: 13,
+                                      color: isSelected
+                                          ? (isDark ? Colors.white : Colors.black87)
+                                          : (isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade700),
                                     ),
                                   ),
                                 ),
@@ -1120,7 +1211,11 @@ class _ChatViewState extends State<_ChatView> {
                                   const SizedBox(width: 8),
                                   InkWell(
                                     onTap: () => widget.onTabClosed(tab),
-                                    child: Icon(Icons.close, size: 14, color: Colors.grey.shade600),
+                                    child: Icon(
+                                      Icons.close,
+                                      size: 14,
+                                      color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade600,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -1136,13 +1231,13 @@ class _ChatViewState extends State<_ChatView> {
                 children: [
                   if (!widget.isDesktop || !widget.desktopSidebarOpen)
                     IconButton(
-                      icon: const Icon(Icons.menu),
+                      icon: Icon(Icons.menu, color: isDark ? Colors.white70 : Colors.black87),
                       tooltip: 'Open sidebar',
                       onPressed: widget.onToggleSidebar,
                     ),
                   if (!widget.isDesktop)
                     IconButton(
-                      icon: const Icon(Icons.arrow_back),
+                      icon: Icon(Icons.arrow_back, color: isDark ? Colors.white70 : Colors.black87),
                       tooltip: 'Back',
                       onPressed: widget.onBack,
                     ),
@@ -1151,16 +1246,18 @@ class _ChatViewState extends State<_ChatView> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
                       ),
                     ),
                   ),
+                  const _ThemeSwitchButton(),
                   if (sessionMessages.isNotEmpty)
                     IconButton(
                       icon: Icon(Icons.file_download_outlined,
-                          color: Colors.grey.shade600),
+                          color: isDark ? Colors.white70 : Colors.grey.shade600),
                       tooltip: 'Export chat',
                       onPressed: () {
                         final exportText =
@@ -1194,12 +1291,16 @@ class _ChatViewState extends State<_ChatView> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.send,
-                              size: 48, color: Colors.grey.shade300),
+                          Icon(Icons.chat_bubble_outline,
+                              size: 48, color: isDark ? const Color(0xFF4A6588) : Colors.grey.shade300),
                           const SizedBox(height: 12),
                           Text(
-                            'Send a message to start',
-                            style: TextStyle(color: Colors.grey.shade500),
+                            'What can I help with?',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -1225,12 +1326,14 @@ class _ChatViewState extends State<_ChatView> {
         // Input
         Container(
           padding: const EdgeInsets.only(bottom: 4),
-          color: Colors.white,
+          color: isDark ? const Color(0xFF0C132C) : Colors.white,
           child: SafeArea(
             top: false,
             child: ChatInput(
               controller: _chatInputCtrl,
-              enabled: !isLoading && !isStreaming,
+              enabled: !isLoading,
+              isStreaming: isStreaming,
+              onStop: () => chat.stopStreaming(),
               onFork: widget.onFork,
               onSend: (text) {
                 final auth = context.read<AuthProvider>();
@@ -1240,6 +1343,76 @@ class _ChatViewState extends State<_ChatView> {
               },
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Theme Switch Button ──────────────────────────────────────────────────────
+
+class _ThemeSwitchButton extends StatelessWidget {
+  final Color? color;
+  const _ThemeSwitchButton({this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProv = context.watch<ThemeProvider>();
+    final mode = themeProv.themeMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = color ?? (isDark ? Colors.white70 : Colors.black54);
+
+    IconData iconData;
+    if (mode == ThemeMode.dark) {
+      iconData = Icons.dark_mode_outlined;
+    } else if (mode == ThemeMode.light) {
+      iconData = Icons.light_mode_outlined;
+    } else {
+      iconData = Icons.brightness_auto_outlined;
+    }
+
+    return PopupMenuButton<ThemeMode>(
+      icon: Icon(iconData, size: 20, color: iconColor),
+      tooltip: 'Theme mode (${mode == ThemeMode.system ? 'System' : mode == ThemeMode.dark ? 'Dark' : 'Light'})',
+      onSelected: (newMode) {
+        themeProv.setThemeMode(newMode);
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem(
+          value: ThemeMode.system,
+          child: Row(children: [
+            const Icon(Icons.brightness_auto, size: 18),
+            const SizedBox(width: 8),
+            const Text('Auto (System)'),
+            if (mode == ThemeMode.system) ...[
+              const Spacer(),
+              const Icon(Icons.check, size: 16, color: Color(0xFF2196F3)),
+            ],
+          ]),
+        ),
+        PopupMenuItem(
+          value: ThemeMode.light,
+          child: Row(children: [
+            const Icon(Icons.light_mode_outlined, size: 18),
+            const SizedBox(width: 8),
+            const Text('Light mode'),
+            if (mode == ThemeMode.light) ...[
+              const Spacer(),
+              const Icon(Icons.check, size: 16, color: Color(0xFF2196F3)),
+            ],
+          ]),
+        ),
+        PopupMenuItem(
+          value: ThemeMode.dark,
+          child: Row(children: [
+            const Icon(Icons.dark_mode_outlined, size: 18),
+            const SizedBox(width: 8),
+            const Text('Dark mode'),
+            if (mode == ThemeMode.dark) ...[
+              const Spacer(),
+              const Icon(Icons.check, size: 16, color: Color(0xFF2196F3)),
+            ],
+          ]),
         ),
       ],
     );

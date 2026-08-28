@@ -231,6 +231,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _showExportDialog(
       BuildContext context, ChatProvider chat, String sessionTitle) {
     final exportText = _buildExportText(chat.messages, sessionTitle);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showModalBottomSheet(
       context: context,
@@ -243,9 +244,10 @@ class _ChatScreenState extends State<ChatScreen> {
           minChildSize: 0.4,
           builder: (_, scrollCtrl) {
             return Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF081226) : Colors.white,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                border: isDark ? const Border(top: BorderSide(color: Color(0xFF1E4E79))) : null,
               ),
               child: SafeArea(
                 child: Column(
@@ -256,7 +258,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       width: 40,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
+                        color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -266,37 +268,39 @@ class _ChatScreenState extends State<ChatScreen> {
                           const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
                         children: [
-                          const Icon(Icons.description_outlined,
-                              size: 20, color: Color(0xFF6C63FF)),
+                          Icon(Icons.description_outlined,
+                              size: 20, color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0C132C)),
                           const SizedBox(width: 8),
-                          const Text(
+                          Text(
                             'Export Chat',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
                           const Spacer(),
                           Text(
                             '${exportText.length} chars',
                             style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade500),
+                                fontSize: 12, color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500),
                           ),
                         ],
                       ),
                     ),
-                    const Divider(height: 1),
+                    Divider(height: 1, color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade200),
                     // Content
                     Expanded(
                       child: SingleChildScrollView(
                         controller: scrollCtrl,
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                         child: SelectableText(
                           exportText,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'monospace',
                             fontSize: 12,
                             height: 1.5,
+                            color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
                           ),
                         ),
                       ),
@@ -310,11 +314,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           icon: const Icon(Icons.copy, size: 18),
                           label: const Text('Copy to Clipboard'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6C63FF),
+                            backgroundColor: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 14),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
+                              side: isDark ? const BorderSide(color: Color(0xFF1E4E79)) : BorderSide.none,
                             ),
                           ),
                           onPressed: () {
@@ -383,7 +388,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: const Color(0xFF0C132C),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
@@ -406,12 +411,16 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.send,
+                            Icon(Icons.chat_bubble_outline,
                                 size: 48, color: Colors.grey.shade300),
                             const SizedBox(height: 12),
                             Text(
-                              'Send a message to start',
-                              style: TextStyle(color: Colors.grey.shade500),
+                              'What can I help with?',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade500,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ],
                         ),
@@ -436,7 +445,9 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           ChatInput(
             controller: _chatInputCtrl,
-            enabled: !chat.sending,
+            enabled: !chat.loading,
+            isStreaming: chat.sending,
+            onStop: () => chat.stopStreaming(),
             onSend: (text) {
               if (auth.user != null) {
                 chat.sendMessage(auth.user!.userId, text);

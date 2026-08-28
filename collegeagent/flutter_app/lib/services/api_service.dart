@@ -81,6 +81,16 @@ class ApiService {
         .toList();
   }
 
+  Future<void> stopChat(String sessionId) async {
+    try {
+      await _client.post(
+        Uri.parse('$baseUrl/api/chat/stop'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'sessionId': sessionId}),
+      );
+    } catch (_) {}
+  }
+
   /// Sends a message and streams the AI response via SSE.
   /// Returns a Future that resolves to a cancel function.
   Future<void Function()> streamChat({
