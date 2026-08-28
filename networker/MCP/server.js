@@ -933,6 +933,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         let existingNode = findNodeInIndex(vaultIndexData.nodes, targetIdentifier);
         const crawlUrl = url || (existingNode ? (existingNode.url || existingNode.sourceUrl) : null);
 
+        let crawledContent = "";
+        let crawledTitle = existingNode ? existingNode.title : null;
         let crawledOutboundLinks = [];
 
         if (crawlUrl) {
