@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "dotenv/config";
 /**
  * Networker MCP Server
  * 
@@ -30,6 +31,18 @@ import { join, basename } from 'path';
 import { createHash } from 'crypto';
 
 // AutoRAG Search API URL (run_api.py serves on this port)
+
+import { exec } from 'child_process';
+// Ensure Local Firecrawl Docker is running
+console.log('Starting Local Firecrawl Docker containers...');
+exec('cd /home/collegeagent/firecrawl && docker compose up -d', (err, stdout, stderr) => {
+  if (err) {
+    console.error('Failed to start local Firecrawl Docker:', err);
+  } else {
+    console.log('Local Firecrawl Docker is up.');
+  }
+});
+
 const AUTORAG_API_URL = process.env.AUTORAG_API_URL || 'http://127.0.0.1:8002';
 
 // Brave Search API
@@ -47,7 +60,7 @@ const __dirname_mcp = dirname(__filename_mcp);
 const MCP_ASSETS_DIR = join(__dirname_mcp, 'assets');
 
 // ── Playwright: synchronous 1-hop crawl for web_search ──
-import { chromium } from 'playwright';
+// Playwright removed
 
 /**
  * Sanitize a title for use as an Obsidian filename.
@@ -97,223 +110,148 @@ function detectBlocking(title, pageText) {
   return { blocked: false };
 }
 
+
+/**
+ * Extract outbound links from markdown via regex.
+ */
+function extractOutboundLinks(markdown) {
+  const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  const links = [];
+  let match;
+  while ((match = linkRegex.exec(markdown)) !== null) {
+    links.push({ title: match[1].replace(/\n/g, ' ').trim(), url: match[2] });
+  }
+  return links.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i);
+}
+
+/**
+ * Perform a single scrape using a specific Firecrawl endpoint.
+ */
+async function scrapeWithFirecrawl(endpoint, apiKey, url) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ url, formats: ['markdown'] })
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+  }
+
+  const json = await response.json();
+  if (!json.success || !json.data) {
+    throw new Error(`Firecrawl failed: ${JSON.stringify(json.error || json)}`);
+  }
+  
+  return {
+    markdown: json.data.markdown || '',
+    title: json.data.metadata?.title || ''
+  };
+}
+
 async function crawlPagesSync(urls, vaultDir) {
   if (!urls || urls.length === 0) return [];
-
-  let browser;
+  
   const results = [];
+  const LOCAL_FIRECRAWL_URL = 'http://127.0.0.1:3002/v1/scrape';
+  const API_FIRECRAWL_URL = 'https://api.firecrawl.dev/v1/scrape';
+  const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || null;
 
-  try {
-    // Use new headless mode (harder to detect) + realistic browser settings
-    browser = await chromium.launch({
-      headless: true,
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--disable-features=IsolateOrigins,site-per-process',
-      ],
-    });
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      viewport: { width: 1440, height: 900 },
-      locale: 'en-US',
-      timezoneId: 'America/Los_Angeles',
-      extraHTTPHeaders: {
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      },
-    });
+  const { existsSync } = require('fs');
+  const { mkdir, writeFile } = require('fs/promises');
+  const { join } = require('path');
 
-    // Ensure vault directory exists
-    if (!existsSync(vaultDir)) {
-      await mkdir(vaultDir, { recursive: true });
-    }
+  if (!existsSync(vaultDir)) {
+    await mkdir(vaultDir, { recursive: true });
+  }
 
-    for (const url of urls) {
-      const page = await context.newPage();
-      // Block heavy resources
-      await page.route('**/*', (route) => {
-        const type = route.request().resourceType();
-        if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
-          route.abort();
-        } else {
-          route.continue();
+  for (const url of urls) {
+    try {
+      console.log(`\n🕸️  Crawling ${url} (Local Firecrawl)...`);
+      let scrapeResult;
+      
+      try {
+        scrapeResult = await scrapeWithFirecrawl(LOCAL_FIRECRAWL_URL, null, url);
+      } catch (err) {
+        console.error(`  ⚠️ Local Firecrawl failed: ${err.message}. Attempting API fallback...`);
+        scrapeResult = { markdown: '', title: '' };
+      }
+
+      let blockCheck = detectBlocking(scrapeResult.title, scrapeResult.markdown);
+      
+      if (blockCheck.blocked || !scrapeResult.markdown) {
+        console.warn(`  ⚠️ Local blocked (${blockCheck.reason || 'No Content'}). Falling back to official API...`);
+        if (!FIRECRAWL_API_KEY) {
+          throw new Error('Fallback failed: FIRECRAWL_API_KEY is not set in environment.');
         }
+        
+        scrapeResult = await scrapeWithFirecrawl(API_FIRECRAWL_URL, FIRECRAWL_API_KEY, url);
+        blockCheck = detectBlocking(scrapeResult.title, scrapeResult.markdown);
+        
+        if (blockCheck.blocked) {
+           throw new Error(`Official API also blocked: ${blockCheck.reason}`);
+        }
+        console.log(`  ✅ Official API fallback successful.`);
+      }
+
+      const rawTitle = scrapeResult.title || 'Untitled';
+      const cleanTitle = sanitizeFilename(rawTitle, url);
+      const pageMarkdown = scrapeResult.markdown;
+      const outboundLinks = extractOutboundLinks(pageMarkdown);
+
+      let mdContent = `# ${cleanTitle}\n\n`;
+      mdContent += `- **Source URL**: [${url}](${url})\n`;
+      mdContent += `- **Crawled At**: ${new Date().toISOString()}\n\n`;
+      mdContent += `## Content\n\n`;
+      mdContent += (pageMarkdown || '*No text content extracted.*') + '\n\n';
+      mdContent += `## Outbound Links\n\n`;
+
+      if (outboundLinks.length > 0) {
+        for (const link of outboundLinks) {
+          const cleanLinkTitle = sanitizeFilename(link.title, link.url);
+          mdContent += `- [[${cleanLinkTitle}]] ([${link.title || cleanLinkTitle}](${link.url}))\n`;
+        }
+      } else {
+        mdContent += 'No outbound links found on this page.\n';
+      }
+
+      const filePath = join(vaultDir, `${cleanTitle}.md`);
+      await writeFile(filePath, mdContent, 'utf-8');
+      console.error(`  📄 Saved: ${cleanTitle}.md → ${vaultDir}`);
+
+      const contentLines = mdContent.split('\n');
+      const pad = String(contentLines.length).length;
+      const numberedContent = contentLines.map((line, i) =>
+        `${String(i + 1).padStart(pad, ' ')}|${line}`
+      ).join('\n');
+
+      results.push({
+        url,
+        title: cleanTitle,
+        content: numberedContent,
+        totalLines: contentLines.length,
+        outboundLinks: outboundLinks.map(l => ({
+          title: sanitizeFilename(l.title, l.url),
+          url: l.url,
+        })),
       });
 
-      try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-
-        // Handle WAF challenges — wait for Cloudflare / other challenges to resolve
-        let rawTitle = await page.title();
-        const challengePatterns = ['Client Challenge', 'Just a moment', 'Attention Required'];
-        const isChallenge = challengePatterns.some(p => rawTitle.includes(p));
-        if (isChallenge) {
-          console.error(`  \u{23F3} Challenge detected for ${url}: "${rawTitle}", waiting up to 15s...`);
-          for (let attempt = 0; attempt < 15; attempt++) {
-            await page.waitForTimeout(1000);
-            rawTitle = await page.title();
-            const stillChallenge = challengePatterns.some(p => rawTitle.includes(p));
-            if (!stillChallenge && rawTitle) {
-              console.error(`  \u{2705} Challenge solved after ${attempt + 1}s`);
-              break;
-            }
-          }
-        }
-
-        // Check if page is still blocked after waiting
-        const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) || '');
-        const blockCheck = detectBlocking(rawTitle, bodyText);
-        if (blockCheck.blocked) {
-          console.error(`  \u{1F6AB} Blocked: ${url} — ${blockCheck.reason}`);
-          results.push({
-            url,
-            title: rawTitle || 'Blocked',
-            content: `[BLOCKED] This page could not be crawled: ${blockCheck.reason}. The site may use Cloudflare, CDN protection, or bot detection. Use web_search snippets for this URL instead.`,
-            totalLines: 1,
-            outboundLinks: [],
-            crawlBlocked: true,
-            blockReason: blockCheck.reason,
-          });
-          await page.close().catch(() => {});
-          continue;
-        }
-
-        const cleanTitle = sanitizeFilename(rawTitle, url);
-
-        // Extract main content as markdown via DOM walker
-        const pageMarkdown = await page.evaluate(() => {
-          const selectors = ['main', 'article', '#content', '#main', '.content', '.main'];
-          let root = null;
-          for (const sel of selectors) {
-            root = document.querySelector(sel);
-            if (root) break;
-          }
-          if (!root) root = document.body;
-
-          function toMarkdown(node) {
-            if (!node) return '';
-            const ignoreTags = ['SCRIPT', 'STYLE', 'NAV', 'HEADER', 'FOOTER', 'IFRAME', 'NOSCRIPT', 'SVG', 'FORM', 'INPUT', 'BUTTON'];
-            if (ignoreTags.includes(node.tagName)) return '';
-            if (node.nodeType === Node.TEXT_NODE) return node.nodeValue.replace(/\s+/g, ' ');
-            if (node.nodeType !== Node.ELEMENT_NODE) return '';
-            const childrenMarkdown = Array.from(node.childNodes).map(child => toMarkdown(child)).join('');
-            const tag = node.tagName;
-            switch (tag) {
-              case 'H1': return `\n# ${childrenMarkdown.trim()}\n`;
-              case 'H2': return `\n## ${childrenMarkdown.trim()}\n`;
-              case 'H3': return `\n### ${childrenMarkdown.trim()}\n`;
-              case 'H4': return `\n#### ${childrenMarkdown.trim()}\n`;
-              case 'H5': return `\n##### ${childrenMarkdown.trim()}\n`;
-              case 'H6': return `\n###### ${childrenMarkdown.trim()}\n`;
-              case 'P': return `\n${childrenMarkdown.trim()}\n`;
-              case 'BR': return `\n`;
-              case 'STRONG': case 'B': return `**${childrenMarkdown.trim()}**`;
-              case 'EM': case 'I': return `*${childrenMarkdown.trim()}*`;
-              case 'LI': return `\n- ${childrenMarkdown.trim()}`;
-              case 'UL': return `\n${childrenMarkdown.trim()}\n`;
-              case 'OL': return `\n${childrenMarkdown.trim()}\n`;
-              case 'A': {
-                const href = node.getAttribute('href');
-                const text = childrenMarkdown.trim();
-                if (!text) return '';
-                try {
-                  const absUrl = new URL(href, window.location.href);
-                  const isImg = /\.(png|jpg|jpeg|gif|svg)$/i.test(absUrl.pathname);
-                  if (isImg) return `![${text}](${absUrl.toString()})`;
-                } catch {}
-                return href ? `[${text}](${href})` : text;
-              }
-              case 'IMG': {
-                const src = node.getAttribute('src');
-                const alt = node.getAttribute('alt') || '';
-                if (!src) return '';
-                try { return `![${alt}](${new URL(src, window.location.href).toString()})`; }
-                catch { return `![${alt}](${src})`; }
-              }
-              default: return childrenMarkdown;
-            }
-          }
-          return toMarkdown(root).replace(/\n{3,}/g, '\n\n').trim();
-        });
-
-        // Extract outbound links (1-hop)
-        const outboundLinks = await page.evaluate(() => {
-          return Array.from(document.querySelectorAll('a'))
-            .map(a => ({
-              href: a.href,
-              text: (a.innerText || a.getAttribute('title') || '').trim(),
-            }))
-            .filter(item => item.href)
-            .map(item => {
-              try {
-                const absUrl = new URL(item.href, window.location.href);
-                if (absUrl.protocol === 'http:' || absUrl.protocol === 'https:') {
-                  return { url: absUrl.toString(), title: item.text };
-                }
-              } catch {}
-              return null;
-            })
-            .filter(Boolean)
-            .filter((v, i, arr) => arr.findIndex(x => x.url === v.url) === i);
-        });
-
-        // Build Obsidian-style markdown file
-        let mdContent = `# ${cleanTitle}\n\n`;
-        mdContent += `- **Source URL**: [${url}](${url})\n`;
-        mdContent += `- **Crawled At**: ${new Date().toISOString()}\n\n`;
-        mdContent += `## Content\n\n`;
-        mdContent += (pageMarkdown || '*No text content extracted.*') + '\n\n';
-        mdContent += `## Outbound Links\n\n`;
-        if (outboundLinks.length > 0) {
-          for (const link of outboundLinks) {
-            const cleanLinkTitle = sanitizeFilename(link.title, link.url);
-            mdContent += `- [[${cleanLinkTitle}]] ([${link.title || cleanLinkTitle}](${link.url}))\n`;
-          }
-        } else {
-          mdContent += 'No outbound links found on this page.\n';
-        }
-
-        // Save to vault
-        const filePath = join(vaultDir, `${cleanTitle}.md`);
-        await writeFile(filePath, mdContent, 'utf-8');
-        console.error(`  📄 Saved: ${cleanTitle}.md → ${vaultDir}`);
-
-        // Add line numbers to content for citation
-        const contentLines = mdContent.split('\n');
-        const pad = String(contentLines.length).length;
-        const numberedContent = contentLines.map((line, i) =>
-          `${String(i + 1).padStart(pad, ' ')}|${line}`
-        ).join('\n');
-
-        results.push({
-          url,
-          title: cleanTitle,
-          content: mdContent,
-          totalLines: contentLines.length,
-          outboundLinks: outboundLinks.map(l => ({
-            title: sanitizeFilename(l.title, l.url),
-            url: l.url,
-          })),
-        });
-
-      } catch (err) {
-        console.error(`  ⚠️  Crawl failed for ${url}: ${err.message}`);
-        results.push({
-          url,
-          title: sanitizeFilename(null, url),
-          content: `Crawl failed: ${err.message}`,
-          totalLines: 1,
-          outboundLinks: [],
-          crawlError: err.message,
-        });
-      } finally {
-        await page.close().catch(() => {});
-      }
+    } catch (err) {
+      console.error(`  ⚠️  Crawl failed for ${url}: ${err.message}`);
+      results.push({
+        url,
+        title: sanitizeFilename(null, url),
+        content: `[BLOCKED] Crawl failed: ${err.message}`,
+        totalLines: 1,
+        outboundLinks: [],
+        crawlError: err.message,
+      });
     }
-  } catch (err) {
-    console.error(`⚠️  Playwright browser error: ${err.message}`);
-  } finally {
-    if (browser) await browser.close().catch(() => {});
   }
 
   return results;
