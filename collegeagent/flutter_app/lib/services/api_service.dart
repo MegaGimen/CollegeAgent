@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import '../models/user.dart';
 import '../models/session.dart';
 import '../models/message.dart';
+import '../models/memory_version.dart';
 
 typedef OnToken = void Function(String token);
 typedef OnDone = void Function(String messageId, String fullText);
@@ -44,11 +45,27 @@ class ApiService {
         .toList();
   }
 
-  Future<SessionModel> createSession(String userId) async {
+  Future<SessionModel> createSession(
+    String userId, {
+    String mode = 'regular',
+    String? courseId,
+    String? courseName,
+    List<String>? fileIds,
+    String? title,
+  }) async {
+    final body = <String, dynamic>{
+      'userId': userId,
+      'mode': mode,
+    };
+    if (courseId != null) body['courseId'] = courseId;
+    if (courseName != null) body['courseName'] = courseName;
+    if (fileIds != null) body['fileIds'] = fileIds;
+    if (title != null) body['title'] = title;
+
     final res = await _client.post(
       Uri.parse('$baseUrl/api/sessions'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'userId': userId}),
+      body: jsonEncode(body),
     );
     if (res.statusCode != 201) {
       throw Exception('Create session failed: ${res.body}');
@@ -246,6 +263,34 @@ class ApiService {
     }
   }
 
+  Future<List<MemoryVersion>> getMemoryVersions(String userId) async {
+    final res = await _client.get(
+      Uri.parse('$baseUrl/api/memory/versions?userId=$userId'),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Get memory versions failed: ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = data['versions'] as List<dynamic>? ?? [];
+    return list.map((e) => MemoryVersion.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<String> rollbackMemory(String userId, String versionId) async {
+    final res = await _client.post(
+      Uri.parse('$baseUrl/api/memory/rollback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'userId': userId,
+        'versionId': versionId,
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('Rollback memory failed: ${res.body}');
+    }
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    return data['content'] as String? ?? '';
+  }
+
   Future<void> rollbackMessage(String sessionId, String messageId) async {
     final res = await _client.post(
       Uri.parse('$baseUrl/api/messages/rollback'),
@@ -306,6 +351,35 @@ class ApiService {
     final res = await _client.get(Uri.parse('$baseUrl/api/canvas/pages?courseId=$courseId&userId=$userId'));
     if (res.statusCode != 200) throw Exception('Failed to get Canvas pages: ${res.body}');
     return jsonDecode(res.body);
+  }
+
+  Future<dynamic> getCanvasFiles(String courseId, {String? userId}) async {
+    final query = userId != null ? 'courseId=$courseId&userId=$userId' : 'courseId=$courseId';
+    final res = await _client.get(Uri.parse('$baseUrl/api/canvas/files?$query'));
+    if (res.statusCode != 200) throw Exception('Failed to get Canvas files: ${res.body}');
+    return jsonDecode(res.body);
+  }
+
+  Future<Map<String, dynamic>> packageCanvasFiles({
+    required String courseId,
+    required String courseName,
+    required List<String> fileIds,
+    String? userId,
+  }) async {
+    final res = await _client.post(
+      Uri.parse('$baseUrl/api/canvas/package-files'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'courseId': courseId,
+        'courseName': courseName,
+        'fileIds': fileIds,
+        'userId': userId,
+      }),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('打包文件失败: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   Future<dynamic> getCanvasPageDetail(String courseId, String? moduleId, String pageId, String userId, {String? itemType, String? itemId}) async {
@@ -407,6 +481,126 @@ class ApiService {
       return {'syncing': false};
     }
     return Map<String, dynamic>.from(jsonDecode(res.body));
+  }
+
+  Future<Map<String, dynamic>> getLumaEvents({
+    String city = 'san_francisco',
+    List<String>? categories,
+    String? startDate,
+    String? endDate,
+    int limit = 50,
+    String? cursor,
+    String? query,
+    String? slug,
+  }) async {
+    final queryParams = <String, String>{
+      'city': city,
+      'pagination_limit': limit.toString(),
+    };
+    if (categories != null && categories.isNotEmpty) {
+      queryParams['categories'] = categories.join(',');
+    } else if (slug != null && slug.isNotEmpty) {
+      queryParams['slug'] = slug;
+    }
+    if (startDate != null && startDate.isNotEmpty) {
+      queryParams['start_date'] = startDate;
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      queryParams['end_date'] = endDate;
+    }
+    if (cursor != null && cursor.isNotEmpty) {
+      queryParams['pagination_cursor'] = cursor;
+    }
+    if (query != null && query.isNotEmpty) {
+      queryParams['query'] = query;
+    }
+
+    final uri = Uri.parse('$baseUrl/api/luma/events').replace(queryParameters: queryParams);
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception('Failed to fetch Luma events: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getLumaEventDetail(String eventApiId) async {
+    final uri = Uri.parse('$baseUrl/api/luma/event-detail').replace(queryParameters: {
+      'event_api_id': eventApiId,
+    });
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception('Failed to fetch Luma event detail: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getLumaDumpMarkdown({
+    String city = 'san_francisco',
+    List<String>? categories,
+    String? startDate,
+    String? endDate,
+    int page = 1,
+    String? cursor,
+  }) async {
+    final queryParams = <String, String>{
+      'city': city,
+      'locations': city,
+      'page': page.toString(),
+    };
+    if (categories != null && categories.isNotEmpty) {
+      queryParams['categories'] = categories.join(',');
+    }
+    if (startDate != null && startDate.isNotEmpty) {
+      queryParams['start_date'] = startDate;
+    }
+    if (endDate != null && endDate.isNotEmpty) {
+      queryParams['end_date'] = endDate;
+    }
+    if (cursor != null && cursor.isNotEmpty) {
+      queryParams['pagination_cursor'] = cursor;
+    }
+
+    final uri = Uri.parse('$baseUrl/api/luma/dump-markdown').replace(queryParameters: queryParams);
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception('Failed to fetch Luma dump markdown: ${res.body}');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> startLumaVaultSync({
+    required String startDate,
+    required String endDate,
+    List<String>? locations,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/luma/vault/sync-task');
+    final res = await _client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'start_date': startDate,
+        'end_date': endDate,
+        if (locations != null && locations.isNotEmpty) 'locations': locations,
+      }),
+    );
+    if (res.statusCode != 200) {
+      String errMsg = '启动同步任务失败';
+      try {
+        final err = jsonDecode(res.body);
+        if (err['error'] != null) errMsg = err['error'];
+      } catch (_) {}
+      throw Exception(errMsg);
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getLumaVaultSyncStatus() async {
+    final uri = Uri.parse('$baseUrl/api/luma/vault/sync-task');
+    final res = await _client.get(uri);
+    if (res.statusCode != 200) {
+      throw Exception('获取同步任务状态失败');
+    }
+    return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
   void dispose() {

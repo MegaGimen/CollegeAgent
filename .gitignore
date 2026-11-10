@@ -27,3 +27,35 @@ memories/
 
 # Temporary & scratch directories
 scratch/
+
+# Private user data: Canvas, Gmail and personal vaults, Canvas dumps, course files
+networker/MCP/private_vaults/
+canvas/dumps/
+canvas/*.pdf
+collegeagent/uploads/
+collegeagent/sessions/
+
+# Crawl output and generated vault data
+networker/vault/
+networker/MCP/assets/
+networker/autorag/data/
+luma/vault/
+
+# Local environments and third-party checkouts
+c4ai-env/
+firecrawl/
+venv/
+.venv/
+
+# Backups, dumps and scratch data
+*.bak
+*.log
+msg*.json
+*_text.txt
+test_output.json
+test_payload.txt
+test_json.txt
+Genius_Debate_Record.md
+opioid-overdose-intervention-body.*
+/*.jpg
+networker/ziHmZzkd

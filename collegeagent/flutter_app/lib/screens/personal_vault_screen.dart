@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/file_picker_service.dart';
 
@@ -124,21 +125,92 @@ class _PersonalVaultScreenState extends State<PersonalVaultScreen> {
   }
 
   void _showMarkdownPreview(dynamic fileNode) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(fileNode['title'] ?? 'Document Preview'),
+        backgroundColor: isDark ? const Color(0xFF081226) : Colors.white,
+        title: Text(
+          fileNode['title'] ?? 'Document Preview',
+          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        ),
         content: SizedBox(
           width: 800,
           height: 600,
           child: SelectionArea(
-            child: Markdown(data: fileNode['content'] ?? 'No content'),
+            child: Markdown(
+              data: fileNode['content'] ?? 'No content',
+              onTapLink: (text, href, title) async {
+                if (href == null || href.trim().isEmpty) return;
+                try {
+                  String urlStr = href.trim();
+                  if (!urlStr.startsWith('http://') &&
+                      !urlStr.startsWith('https://') &&
+                      !urlStr.startsWith('mailto:')) {
+                    urlStr = 'https://$urlStr';
+                  }
+                  final uri = Uri.parse(urlStr);
+                  await launchUrl(
+                    uri,
+                    mode: LaunchMode.externalApplication,
+                    webOnlyWindowName: '_blank',
+                  );
+                } catch (e) {
+                  debugPrint('Failed to open URL $href: $e');
+                }
+              },
+              styleSheet: MarkdownStyleSheet(
+                p: TextStyle(
+                  color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+                h1: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+                h2: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+                h3: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+                strong: TextStyle(
+                  color: isDark ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+                code: TextStyle(
+                  backgroundColor: isDark ? const Color(0xFF01385F) : Colors.grey.shade200,
+                  color: isDark ? const Color(0xFF93C5FD) : Colors.black87,
+                  fontFamily: 'monospace',
+                ),
+                tableColumnWidth: const IntrinsicColumnWidth(),
+                tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                tableBorder: TableBorder.all(
+                  color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                tableHead: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+                tableBody: TextStyle(
+                  color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                ),
+              ),
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+            child: Text(
+              'Close',
+              style: TextStyle(color: isDark ? const Color(0xFF38BDF8) : null),
+            ),
           )
         ],
       ),

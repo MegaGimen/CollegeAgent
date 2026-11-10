@@ -25,6 +25,7 @@ import TurndownService from 'turndown';
 import 'dotenv/config';
 
 import McpManager from './mcp_manager.js';
+import { getVersions, addSnapshot, rollbackToVersion } from './memory_versions.js';
 
 // ─── paths ────────────────────────────────────────────────────────────────────
 
@@ -197,14 +198,16 @@ const mcpManager = new McpManager();
 
 function getRegistrySession(sessionId) {
   if (!_sourceRegistries.has(sessionId)) {
-    _sourceRegistries.set(sessionId, { counter: 0, registry: [], nodeMap: {}, urlMap: {} });
+    _sourceRegistries.set(sessionId, { counter: 0, registry: [], nodeMap: {}, urlMap: {}, fileMap: {} });
   }
-  return _sourceRegistries.get(sessionId);
+  const sess = _sourceRegistries.get(sessionId);
+  if (!sess.fileMap) sess.fileMap = {};
+  return sess;
 }
 
 function registerSource(sessionId, sourceData) {
   const sess = getRegistrySession(sessionId);
-  const { title, nodeId, sourceUrl, fullContent, crawledAt } = sourceData;
+  const { title, nodeId, sourceUrl, fullContent, crawledAt, fileId, courseId, type } = sourceData;
 
   if (nodeId && sess.nodeMap[nodeId]) {
     const existing = sess.registry.find(s => s.id === sess.nodeMap[nodeId]);
@@ -215,7 +218,7 @@ function registerSource(sessionId, sourceData) {
   }
   
   const dedupUrl = sourceUrl || null;
-  if (dedupUrl && !nodeId && sess.urlMap[dedupUrl]) {
+  if (dedupUrl && !nodeId && !fileId && sess.urlMap[dedupUrl]) {
     const existing = sess.registry.find(s => s.id === sess.urlMap[dedupUrl]);
     if (existing) {
       if (fullContent && fullContent.length > (existing.fullContent || '').length) existing.fullContent = fullContent;
@@ -223,11 +226,37 @@ function registerSource(sessionId, sourceData) {
     }
   }
 
+  if (fileId) {
+    const fileKey = courseId ? `${courseId}_${fileId}` : String(fileId);
+    if (sess.fileMap[fileKey]) {
+      const existing = sess.registry.find(s => s.id === sess.fileMap[fileKey]);
+      if (existing) {
+        if (fullContent && fullContent.length > (existing.fullContent || '').length) existing.fullContent = fullContent;
+        return existing.id;
+      }
+    }
+  }
+
   sess.counter++;
-  const entry = { id: sess.counter, title, nodeId: nodeId || null, sourceUrl: dedupUrl, crawledAt: crawledAt || null, fullContent: fullContent || '' };
+  const entry = {
+    id: sess.counter,
+    title,
+    nodeId: nodeId || null,
+    sourceUrl: dedupUrl,
+    crawledAt: crawledAt || null,
+    fullContent: fullContent || '',
+    fileId: fileId || null,
+    courseId: courseId || null,
+    type: type || null,
+  };
   sess.registry.push(entry);
   if (nodeId) sess.nodeMap[nodeId] = entry.id;
-  if (dedupUrl && !nodeId) sess.urlMap[dedupUrl] = entry.id;
+  if (dedupUrl && !nodeId && !fileId) sess.urlMap[dedupUrl] = entry.id;
+  if (fileId) {
+    const fileKey = courseId ? `${courseId}_${fileId}` : String(fileId);
+    sess.fileMap[fileKey] = entry.id;
+    sess.fileMap[String(fileId)] = entry.id;
+  }
   
   return entry.id;
 }
@@ -249,18 +278,22 @@ function parseCitations(text) {
   const citations = [];
   let idx = 0;
 
-  // Compact format: [1], [2,45], [3,45,62], or [3,45-62] (hyphen range)
-  const numRegex = /\[\s*(\d+)(?:\s*,\s*(\d+)(?:\s*[,\-]\s*(\d+))?)?\s*\]/g;
+  // Compact format: [1], [2,45], [3,45,62], or [3,45-62]
+  const numRegex = /\[\s*(\d+)([^\]]*)\]/g;
   let match;
   while ((match = numRegex.exec(text)) !== null) {
-    const before = text.slice(Math.max(0, match.index - 300), match.index);
     const sourceId = parseInt(match[1], 10);
+    const before = text.slice(Math.max(0, match.index - 300), match.index);
     let lines = null;
-    if (match[2]) {
-      const start = parseInt(match[2], 10);
-      const end = match[3] ? parseInt(match[3], 10) : start;
-      lines = { start: Math.min(start, end), end: Math.max(start, end) };
+    
+    const extra = match[2];
+    if (extra && extra.trim().length > 0) {
+       const nums = [...extra.matchAll(/\d+/g)].map(m => parseInt(m[0], 10));
+       if (nums.length > 0) {
+         lines = { start: Math.min(...nums), end: Math.max(...nums) };
+       }
     }
+
     citations.push({
       index: ++idx,
       sourceId,
@@ -270,7 +303,7 @@ function parseCitations(text) {
     });
   }
 
-  // If no numeric citations found, try legacy [Source: title] format
+  // Legacy format fallback
   if (citations.length === 0) {
     const legacyRegex = /\[Source:\s*([^\]]+)\]/g;
     while ((match = legacyRegex.exec(text)) !== null) {
@@ -278,7 +311,8 @@ function parseCitations(text) {
       const raw = match[1].trim();
       let title = raw;
       let lines = null;
-      const linesMatch = raw.match(/^(.+?),\s*lines?\s+(\d+)(?:\s*-\s*(\d+))?$/i);
+
+      const linesMatch = raw.match(/^(.*?)\s*,\s*(\d+)(?:\s*[\-,]\s*(\d+))?$/);
       if (linesMatch) {
         title = linesMatch[1].trim();
         const start = parseInt(linesMatch[2], 10);
@@ -530,6 +564,7 @@ async function resolveCitations(citations, citationSources, userId, sessionId) {
       // Unresolvable citation — still include it with minimal info
       resolved.push({
         index: c.index,
+        sourceId: c.sourceId,
         title: c.title || `Source ${c.sourceId}`,
         nodeId: null,
         snippet: null,
@@ -545,6 +580,19 @@ async function resolveCitations(citations, citationSources, userId, sessionId) {
       if (fullDoc && fullDoc.length > (source.fullContent || '').length) {
         source.fullContent = fullDoc;
       }
+    } else if (source.fileId && (!source.fullContent || source.fullContent.length < 50)) {
+      try {
+        const rfResult = await mcpManager.callTool('read_file_content', {
+          courseId: source.courseId,
+          fileId: source.fileId,
+          userId,
+          sessionId,
+        });
+        if (rfResult) {
+          const parsed = JSON.parse(rfResult);
+          if (parsed.numbered_content) source.fullContent = parsed.numbered_content;
+        }
+      } catch (e) {}
     }
 
     // Extract snippet: exact lines, slide index, or context-matched semantic paragraph
@@ -552,6 +600,7 @@ async function resolveCitations(citations, citationSources, userId, sessionId) {
 
     resolved.push({
       index: c.index,
+      sourceId: c.sourceId,
       title: source.title,
       nodeId: source.nodeId,
       snippet: snippet || null,
@@ -575,6 +624,97 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 setupPersonalVaultRoutes(app);
+
+// ── Luma Events Proxy ────────────────────────────────────────────────────────
+app.get('/api/luma/events', async (req, res) => {
+  try {
+    const url = new URL('http://127.0.0.1:8004/api/events');
+    for (const [k, v] of Object.entries(req.query)) {
+      url.searchParams.set(k, v);
+    }
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/luma/event-detail', async (req, res) => {
+  try {
+    const url = new URL('http://127.0.0.1:8004/api/event-detail');
+    for (const [k, v] of Object.entries(req.query)) {
+      url.searchParams.set(k, v);
+    }
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/luma/dump-markdown', async (req, res) => {
+  try {
+    const url = new URL('http://127.0.0.1:8004/api/dump-markdown');
+    for (const [k, v] of Object.entries(req.query)) {
+      url.searchParams.set(k, v);
+    }
+    const response = await fetch(url.toString());
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/luma/dump-markdown', async (req, res) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8004/api/dump-markdown', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/luma/vault/sync-task', async (req, res) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8004/api/vault/sync-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/luma/vault/sync-task', async (req, res) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8004/api/vault/sync-task');
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/luma/vault/status', async (req, res) => {
+  try {
+    const response = await fetch('http://127.0.0.1:8004/api/vault/status');
+    const data = await response.json();
+    res.status(response.status).json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── POST /api/login ──────────────────────────────────────────────────────────
 
@@ -608,8 +748,8 @@ app.get('/api/sessions', (req, res) => {
   res.json(list);
 });
 
-app.post('/api/sessions', (req, res) => {
-  const { userId } = req.body;
+app.post('/api/sessions', async (req, res) => {
+  const { userId, mode, courseId, courseName, fileIds, title } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   const sessionId = uuidv4();
@@ -617,10 +757,12 @@ app.post('/api/sessions', (req, res) => {
     id: sessionId,
     sessionId,
     userId,
-    title: 'New Session',
+    title: title || 'New Session',
     createdAt: new Date().toISOString(),
     lastActive: new Date().toISOString(),
+    mode: 'regular',
   };
+
   sessions.set(sessionId, session);
   messages.set(sessionId, []);
   saveData();
@@ -797,8 +939,27 @@ app.post('/api/chat', async (req, res) => {
         userTimeStr = String(localTime);
       }
     }
-    console.log(`🕒 User Time: ${userTimeStr} (from client localTime: ${localTime || 'none'})`);
-    
+    const nowUtc = new Date();
+    const campusTimeStr = nowUtc.toLocaleString('en-US', {
+      timeZone: 'America/Los_Angeles',
+      dateStyle: 'full',
+      timeStyle: 'long',
+      hour12: false
+    });
+
+    const timeContext = `## Current Time & Timezone Context
+
+- Campus Local Time (UC Berkeley, America/Los_Angeles): ${campusTimeStr}
+- User Device Time: ${userTimeStr}
+
+### Timezone & Canvas Deadline Rules:
+1. UC Berkeley courses, syllabi, assignment due dates, lecture times, discussions, and office hours ALWAYS operate on California / Pacific Time (America/Los_Angeles: PDT UTC-7 in summer/fall, PST UTC-8 in winter).
+2. Canvas LMS API returns raw timestamps in UTC (Zulu, "Z").
+   - During PDT (UTC-7), a Canvas deadline of 06:59:00Z on day D+1 corresponds to 23:59:00 PDT (11:59 PM) on day D (the previous evening).
+   - During PST (UTC-8), a Canvas deadline of 07:59:00Z on day D+1 corresponds to 23:59:00 PST (11:59 PM) on day D (the previous evening).
+   - For example: Canvas due_at "2026-09-16T06:59:00Z" is Tuesday, September 15, 2026 at 11:59 PM PDT. It is NOT 7:00 AM the next morning, and it aligns exactly with the syllabus "Tue Sept 15".
+3. When presenting deadlines to the user, always reference Pacific Time (PT) and never confuse UTC 06:59Z/07:59Z with morning time.`;
+
     const sessReg = _sourceRegistries.has(sessionId) ? _sourceRegistries.get(sessionId) : { registry: [] };
     let routingTableText = '';
     if (sessReg.registry.length > 0) {
@@ -810,7 +971,51 @@ app.post('/api/chat', async (req, res) => {
         '\n\n*Note: Every factual claim MUST be cited with the numeric source ID and EXACT line numbers (e.g., [1, 45-62] or [2, 12]). Text aliases like [syllabus 103] or [BIO, 36] and bare citations like [1] are strictly forbidden. The first value in brackets MUST be the numeric ID (e.g. [1, 103]).*';
     }
 
-    const fullSystemPrompt = SYSTEM_PROMPT + '\n\n## Current User Time\n\n' + userTimeStr + '\n\n## Current User Memory\n\n' + memoryContent + routingTableText;
+    const session = sessions.get(sessionId);
+    const isTeachingMode = session?.mode === 'teaching';
+
+    let fullSystemPrompt = '';
+    if (isTeachingMode) {
+      const boundDocsText = (session.teachingDocs || []).map(doc => doc.content).join('\n\n---\n\n');
+      fullSystemPrompt = `# CollegeAgent Course Tutoring & Review Assistant (教学辅导与复习模式)
+
+You are CollegeAgent's specialized Course Tutoring & Review Assistant.
+This session is dedicated exclusively to helping the user review, understand, synthesize, and master the course materials bound to this session.
+
+## Bound Course Review Materials
+Below are the exact course documents selected by the user for this review session. Each document is structured with its file name as a level-1 heading (# 文件名) and each individual page or slide as a level-2 heading (## page X):
+
+${boundDocsText || '*No bound course documents available for this session.*'}
+
+## Core Responsibilities & Tutoring Guidelines
+1. Focus on Bound Materials: Strictly prioritize the provided course documents above to answer questions, explain concepts, summarize lectures, formulate study guides, clarify difficult definitions, and generate practice questions.
+2. Pedagogical & Interactive Review:
+   - Provide clear, structured, and pedagogical explanations.
+   - When the user asks for a review or summary, break concepts down logically, highlight core exam takeaways, and connect related ideas across the materials.
+   - When appropriate or requested, quiz the user with targeted review questions to test their understanding.
+3. Source Reporting Convention (NO Brackets, NO Numeric Citations):
+   - You do NOT need to provide strict numeric citations (such as [1, 12] or [sourceId]). DO NOT use square brackets [] for citations.
+   - Whenever you reference a specific fact, concept, quote, or argument from the materials, simply cite the source naturally in plain text by mentioning the file name and the corresponding page number.
+   - Examples of natural source references:
+     - 在《Weber Protestant Ethic.pptx》的 page 4 中指出...
+     - 根据《Syllabus Berkeley Connect Philosophy Fall 2026.pdf》的 page 1...
+     - 这一点可以参考《Chapter 2.pdf》的 page 12。
+4. Context Specificity:
+   - Do not wander off to unrelated topics or search external databases.
+   - Stay grounded in the user's bound course materials.
+
+## Strict Communication Rules
+- NEVER USE EXCLAMATION MARKS (!). ALL responses MUST NOT contain any exclamation marks whatsoever. Keep the tone completely flat, objective, helpful, and devoid of AI flattery or enthusiasm.
+
+${timeContext}
+
+## Current User Memory
+
+${memoryContent}`;
+    } else {
+      fullSystemPrompt = SYSTEM_PROMPT + '\n\n' + timeContext + '\n\n## Current User Memory\n\n' + memoryContent + routingTableText;
+    }
+
     const apiMessages = [
       { role: 'system', content: fullSystemPrompt },
       ...history.map((m) => ({ role: m.role, content: m.text })),
@@ -852,7 +1057,7 @@ app.post('/api/chat', async (req, res) => {
           body: JSON.stringify({
             model: DEEPSEEK_MODEL,
             messages: apiMessages,
-            tools: mcpManager.getAllTools(),
+            ...(isTeachingMode ? {} : { tools: mcpManager.getAllTools() }),
             stream: true,
             stream_options: { include_usage: true },
           }),
@@ -972,51 +1177,182 @@ app.post('/api/chat', async (req, res) => {
 
         // execute each tool
         for (const tc of toolCallList) {
-          const fnName = tc.function.name;
+          const rawFnName = tc.function.name;
+          const fnName = rawFnName.replace(/-/g, '_');
           let fnArgs = {};
           try { fnArgs = JSON.parse(tc.function.arguments); } catch { /* ignore */ }
           fnArgs.userId = userId;  // enforce userId
           fnArgs.sessionId = sessionId; // enforce sessionId
 
-          // ── Translate sourceId → nodeId for read/expand ──
-          if (fnName === 'read' || fnName === 'expand') {
+          // ── Handle read for Canvas files or graph nodes ──
+          if (fnName === 'read') {
+            let srcEntry = null;
+            if (fnArgs.sourceId != null) {
+              srcEntry = getSourceById(sessionId, Number(fnArgs.sourceId));
+              if (!srcEntry) {
+                // Check if sourceId was passed as raw fileId or file_xxx
+                const sess = getRegistrySession(sessionId);
+                const rawIdStr = String(fnArgs.sourceId).replace(/^file_/, '');
+                if (sess.fileMap && sess.fileMap[rawIdStr]) {
+                  srcEntry = getSourceById(sessionId, sess.fileMap[rawIdStr]);
+                }
+              }
+            } else if (fnArgs.fileId != null) {
+              const sess = getRegistrySession(sessionId);
+              const fileKey = fnArgs.courseId ? `${fnArgs.courseId}_${fnArgs.fileId}` : String(fnArgs.fileId);
+              if (sess.fileMap && sess.fileMap[fileKey]) {
+                srcEntry = getSourceById(sessionId, sess.fileMap[fileKey]);
+              }
+            }
+
+            // Case 1: Canvas file via sourceId or registered file
+            if (srcEntry && (srcEntry.fileId || srcEntry.type === 'canvas_file')) {
+              const t0 = Date.now();
+              sseEvent(res, 'tool_start', { name: rawFnName, args: fnArgs });
+
+              const rfArgs = {
+                courseId: srcEntry.courseId || fnArgs.courseId,
+                fileId: srcEntry.fileId || fnArgs.fileId,
+                userId,
+                sessionId,
+              };
+              const rfResult = await mcpManager.callTool('read_file_content', rfArgs);
+              const duration = Date.now() - t0;
+
+              let resultForAgent = rfResult || '';
+              try {
+                const parsed = JSON.parse(rfResult);
+                parsed.sourceId = srcEntry.id;
+                srcEntry.fullContent = parsed.numbered_content || parsed.content || '';
+                if (parsed.title) srcEntry.title = parsed.title;
+                srcEntry.rawMeta = {
+                  tool: 'read_file_content',
+                  sourceId: srcEntry.id,
+                  fileId: srcEntry.fileId,
+                  courseId: srcEntry.courseId,
+                  title: srcEntry.title,
+                };
+                resultForAgent = JSON.stringify({
+                  sourceId: srcEntry.id,
+                  title: srcEntry.title,
+                  numbered_content: parsed.numbered_content || parsed.content || '',
+                });
+              } catch (e) {}
+
+              sseEvent(res, 'tool_end', { name: rawFnName, result: resultForAgent, duration });
+              apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: resultForAgent });
+              allToolCalls.push({ name: rawFnName, args: fnArgs, result: resultForAgent, intermediateText: null, duration });
+              continue;
+            } else if (fnArgs.fileId != null) {
+              // Direct fileId call to read
+              const t0 = Date.now();
+              sseEvent(res, 'tool_start', { name: rawFnName, args: fnArgs });
+
+              const rfArgs = {
+                courseId: fnArgs.courseId,
+                fileId: fnArgs.fileId,
+                userId,
+                sessionId,
+              };
+              const rfResult = await mcpManager.callTool('read_file_content', rfArgs);
+              const duration = Date.now() - t0;
+
+              let resultForAgent = rfResult || '';
+              try {
+                const parsed = JSON.parse(rfResult);
+                const srcId = registerSource(sessionId, {
+                  title: parsed.title || `File ${fnArgs.fileId}`,
+                  fileId: fnArgs.fileId,
+                  courseId: fnArgs.courseId,
+                  type: 'canvas_file',
+                  fullContent: parsed.numbered_content || parsed.content || '',
+                });
+                parsed.sourceId = srcId;
+                const entry = getRegistrySession(sessionId).registry.find(x => x.id === srcId);
+                if (entry) {
+                  entry.rawMeta = {
+                    tool: 'read_file_content',
+                    sourceId: srcId,
+                    fileId: fnArgs.fileId,
+                    courseId: fnArgs.courseId,
+                    title: parsed.title,
+                  };
+                }
+                resultForAgent = JSON.stringify({
+                  sourceId: srcId,
+                  title: parsed.title,
+                  numbered_content: parsed.numbered_content || parsed.content || '',
+                });
+              } catch (e) {}
+
+              sseEvent(res, 'tool_end', { name: rawFnName, result: resultForAgent, duration });
+              apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: resultForAgent });
+              allToolCalls.push({ name: rawFnName, args: fnArgs, result: resultForAgent, intermediateText: null, duration });
+              continue;
+            }
+
+            // Normal node reading (from search/expand)
+            if (fnArgs.sourceId != null) {
+              if (srcEntry?.nodeId) {
+                fnArgs.nodeId = srcEntry.nodeId;
+                delete fnArgs.sourceId;
+              } else {
+                const errMsg = JSON.stringify({
+                  error: `sourceId ${fnArgs.sourceId} not found. Use sourceIds from previous search/read/expand/get_files results.`,
+                });
+                sseEvent(res, 'tool_start', { name: rawFnName, args: { sourceId: fnArgs.sourceId } });
+                sseEvent(res, 'tool_end', { name: rawFnName, result: errMsg, duration: 0 });
+                apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: errMsg });
+                allToolCalls.push({ name: rawFnName, args: fnArgs, result: errMsg, intermediateText: null, duration: 0 });
+                continue;
+              }
+            } else if (fnArgs.nodeId != null) {
+              // Agent sent nodeId directly
+            } else {
+              const errMsg = JSON.stringify({
+                error: 'Missing sourceId. Call read(sourceId) using a sourceId from previous results (search, get_files, etc.).',
+              });
+              sseEvent(res, 'tool_start', { name: rawFnName, args: fnArgs });
+              sseEvent(res, 'tool_end', { name: rawFnName, result: errMsg, duration: 0 });
+              apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: errMsg });
+              allToolCalls.push({ name: rawFnName, args: fnArgs, result: errMsg, intermediateText: null, duration: 0 });
+              continue;
+            }
+          } else if (fnName === 'expand') {
             // For expand: if url is provided, skip nodeId translation — pass through directly
-            if (fnName === 'expand' && fnArgs.url != null) {
+            if (fnArgs.url != null) {
               // expand(url) mode — no sourceId/nodeId needed
             } else if (fnArgs.sourceId != null) {
-              // Agent correctly sent sourceId — translate to nodeId
               const srcEntry = getSourceById(sessionId, Number(fnArgs.sourceId));
               if (srcEntry?.nodeId) {
                 fnArgs.nodeId = srcEntry.nodeId;
               } else {
                 const errMsg = JSON.stringify({
-                  error: `sourceId ${fnArgs.sourceId} not found. Use sourceIds from previous search/read/expand results.`,
+                  error: `sourceId ${fnArgs.sourceId} not found. Use sourceIds from previous results.`,
                 });
-                sseEvent(res, 'tool_start', { name: fnName, args: { sourceId: fnArgs.sourceId } });
-                sseEvent(res, 'tool_end', { name: fnName, result: errMsg, duration: 0 });
+                sseEvent(res, 'tool_start', { name: rawFnName, args: { sourceId: fnArgs.sourceId } });
+                sseEvent(res, 'tool_end', { name: rawFnName, result: errMsg, duration: 0 });
                 apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: errMsg });
-                allToolCalls.push({ name: fnName, args: fnArgs, result: errMsg, intermediateText: null, duration: 0 });
+                allToolCalls.push({ name: rawFnName, args: fnArgs, result: errMsg, intermediateText: null, duration: 0 });
                 continue;
               }
               delete fnArgs.sourceId;
             } else if (fnArgs.nodeId != null) {
-              // Agent sent nodeId directly (schema bypass) — accept it as fallback
+              // fallback
             } else {
               const errMsg = JSON.stringify({
-                error: fnName === 'expand'
-                  ? 'Missing sourceId or url. Call expand(sourceId) or expand(url) — use a sourceId from previous results, or a URL from web_search.'
-                  : 'Missing sourceId. Call read(sourceId) using a sourceId from previous results.',
+                error: 'Missing sourceId or url. Call expand(sourceId) or expand(url) — use a sourceId from previous results, or a URL from web_search.',
               });
-              sseEvent(res, 'tool_start', { name: fnName, args: fnArgs });
-              sseEvent(res, 'tool_end', { name: fnName, result: errMsg, duration: 0 });
+              sseEvent(res, 'tool_start', { name: rawFnName, args: fnArgs });
+              sseEvent(res, 'tool_end', { name: rawFnName, result: errMsg, duration: 0 });
               apiMessages.push({ role: 'tool', tool_call_id: tc.id, content: errMsg });
-              allToolCalls.push({ name: fnName, args: fnArgs, result: errMsg, intermediateText: null, duration: 0 });
+              allToolCalls.push({ name: rawFnName, args: fnArgs, result: errMsg, intermediateText: null, duration: 0 });
               continue;
             }
           }
 
           const t0 = Date.now();
-          sseEvent(res, 'tool_start', { name: fnName, args: fnArgs });
+          sseEvent(res, 'tool_start', { name: rawFnName, args: fnArgs });
 
           fnArgs.userId = userId;
           const result = await mcpManager.callTool(fnName, fnArgs);
@@ -1024,7 +1360,7 @@ app.post('/api/chat', async (req, res) => {
 
           // ── Process result: register sources, inject sourceIds, strip nodeIds ──
           let resultForAgent = result || '';
-          if (result && (fnName === 'search' || fnName === 'read' || fnName === 'web_search' || fnName === 'expand' || fnName === 'get_page_content' || fnName === 'get_recent_emails' || fnName === 'get_syllabus' || fnName === 'get_announcement_detail' || fnName === 'get_assignment_detail' || fnName === 'get_discussion_detail' || fnName === 'read_file_content')) {
+          if (result && (fnName === 'search' || fnName === 'read' || fnName === 'web_search' || fnName === 'expand' || fnName === 'get_page_content' || fnName === 'get_recent_emails' || fnName === 'get_syllabus' || fnName === 'get_announcement_detail' || fnName === 'get_assignment_detail' || fnName === 'get_discussion_detail' || fnName === 'read_file_content' || fnName === 'get_luma_events' || fnName === 'get_files')) {
             try {
               const parsed = JSON.parse(result);
 
@@ -1147,6 +1483,63 @@ app.post('/api/chat', async (req, res) => {
                   parsed.outboundLinks = processOutboundLinks(parsed.outboundLinks);
                 }
                 delete parsed.nodeId;
+              } else if (fnName === 'get_luma_events') {
+                const isSemantic = parsed.is_semantic_search === true;
+                const title = isSemantic
+                  ? (parsed.title || `Luma Semantic Search: "${parsed.query}"`)
+                  : (parsed.title || `Luma Events (Page ${parsed.page || 1})`);
+                const srcId = registerSource(sessionId, {
+                  title: title,
+                  nodeId: null,
+                  sourceUrl: parsed.url || 'https://luma.com',
+                  fullContent: parsed.content || parsed.raw_content || result,
+                });
+                parsed.sourceId = srcId;
+                const entry = getRegistrySession(sessionId).registry.find(x => x.id === srcId);
+                if (entry) {
+                  entry.rawMeta = {
+                    tool: 'get_luma_events',
+                    mode: isSemantic ? 'vault_semantic_search' : 'live_api_pagination',
+                    searchkeys: parsed.query || fnArgs.searchkeys || null,
+                    locations: parsed.locations,
+                    categories: parsed.categories,
+                    start_date: parsed.start_date,
+                    end_date: parsed.end_date,
+                    page: parsed.page,
+                    total_events: parsed.total_events,
+                    sourceId: srcId
+                  };
+                }
+              } else if (fnName === 'get_files') {
+                const filesList = Array.isArray(parsed) ? parsed : (parsed.files || []);
+                for (const f of filesList) {
+                  const srcId = registerSource(sessionId, {
+                    title: f.display_name || f.filename || `File ${f.id}`,
+                    sourceUrl: f.url || null,
+                    fileId: f.id,
+                    courseId: fnArgs.courseId,
+                    type: 'canvas_file',
+                    fullContent: '',
+                  });
+                  f.sourceId = srcId;
+                  f.courseId = fnArgs.courseId;
+                  const entry = getRegistrySession(sessionId).registry.find(x => x.id === srcId);
+                  if (entry) {
+                    entry.rawMeta = {
+                      tool: 'get_files',
+                      fileId: f.id,
+                      courseId: fnArgs.courseId,
+                      display_name: f.display_name,
+                      size: f.size,
+                      mime_class: f.mime_class,
+                      sourceId: srcId,
+                    };
+                  }
+                }
+                parsed = {
+                  files: filesList,
+                  notice: 'Files catalog fetched. To read the full text with line numbers for any file (PDF, PPTX, DOCX, XLSX, etc.), call read(sourceId).',
+                };
               }
 
               // Synchronize rawMeta to match the exact tool output seen by the agent
@@ -1327,6 +1720,20 @@ app.get('/api/graph/node/:nodeId(*)?', async (req, res) => {
           break;
         }
       }
+    }
+
+    if (regSource && (!regSource.fullContent || regSource.fullContent.length < 50) && regSource.fileId) {
+      try {
+        const rfResult = await mcpManager.callTool('read_file_content', {
+          courseId: regSource.courseId,
+          fileId: regSource.fileId,
+          userId: req.query.userId,
+        });
+        if (rfResult) {
+          const parsed = JSON.parse(rfResult);
+          if (parsed.numbered_content) regSource.fullContent = parsed.numbered_content;
+        }
+      } catch (e) {}
     }
 
     if (regSource && regSource.fullContent) {
@@ -1537,27 +1944,51 @@ app.get('/api/memory', async (req, res) => {
   res.json({ content });
 });
 
+// ── GET /api/memory/versions ───────────────────────────────────────────────────
+
+app.get('/api/memory/versions', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  const versions = getVersions(userId);
+  res.json({ versions });
+});
+
+// ── POST /api/memory/rollback ──────────────────────────────────────────────────
+
+app.post('/api/memory/rollback', async (req, res) => {
+  const { userId, versionId } = req.body;
+  if (!userId || !versionId) return res.status(400).json({ error: 'userId and versionId required' });
+  try {
+    const memDir = path.join(__dirname, 'memories');
+    if (!existsSync(memDir)) mkdirSync(memDir, { recursive: true });
+    const safeId = String(userId).replace(/[^a-zA-Z0-9_\-.]/g, '_');
+    const writeCallback = (uid, text) => {
+      writeFileSync(path.join(memDir, `${safeId}.md`), text, 'utf-8');
+    };
+    const result = rollbackToVersion(userId, versionId, writeCallback);
+    res.json({ ok: true, content: result.target.content, newVersion: result.newSnapshot, versions: result.currentVersions });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
 // ── PUT /api/memory ───────────────────────────────────────────────────────────
 
 app.put('/api/memory', async (req, res) => {
   const { userId, content } = req.body;
   if (!userId || content == null) return res.status(400).json({ error: 'userId and content required' });
 
-  // Read current, then str_replace entire content
-  const old = (await mcpManager.getMemory(userId)) || '';
+  const memDir = path.join(__dirname, 'memories');
+  if (!existsSync(memDir)) mkdirSync(memDir, { recursive: true });
+  const safeId = String(userId).replace(/[^a-zA-Z0-9_\-.]/g, '_');
+  const filePath = path.join(memDir, `${safeId}.md`);
+
+  const old = existsSync(filePath) ? readFileSync(filePath, 'utf-8') : '';
   if (old === content) return res.json({ ok: true });
 
-  const result = await mcpManager.callTool('str_replace', { userId, old_str: old, new_str: content });
-  if (result && !result.includes('error')) {
-    return res.json({ ok: true });
-  }
-  // Fallback: direct file write through MCP insert trick
-  // Just write the file directly as last resort
-  const fs = await import('node:fs');
-  const memDir = path.join(__dirname, 'memories');
-  if (!fs.existsSync(memDir)) fs.mkdirSync(memDir, { recursive: true });
-  const safeId = String(userId).replace(/[^a-zA-Z0-9_\-.]/g, '_');
-  fs.writeFileSync(path.join(memDir, `${safeId}.md`), content, 'utf-8');
+  writeFileSync(filePath, content, 'utf-8');
+  addSnapshot(userId, content, 'user_edit', 'User Manual Edit');
+
   res.json({ ok: true });
 });
 
@@ -2140,6 +2571,186 @@ app.get('/api/canvas/assignments', async (req, res) => {
     if (data.error || data.errors) { res.status(500).json(data); } else { res.json(data); }
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/canvas/files', async (req, res) => {
+  try {
+    const { courseId } = req.query;
+    if (!courseId) return res.status(400).json({ error: 'courseId required' });
+    const fetch = (await import('node-fetch')).default || globalThis.fetch;
+    const r = await fetch(`http://127.0.0.1:4091/api/courses/${courseId}/files`);
+    const data = await r.json();
+    if (data.error || data.errors) { res.status(500).json(data); } else { res.json(data); }
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── CANVAS COURSE FILES PACKAGING & DOWNLOAD ─────────────────────────────────
+
+const zipDownloadStore = new Map();
+
+// Periodic cleanup of zip archives older than 30 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, item] of zipDownloadStore.entries()) {
+    if (now - item.createdAt > 30 * 60 * 1000) {
+      try {
+        if (existsSync(item.filePath)) {
+          unlinkSync(item.filePath);
+        }
+      } catch (_) {}
+      zipDownloadStore.delete(id);
+    }
+  }
+}, 5 * 60 * 1000);
+
+async function packageCanvasCourseFiles(courseId, courseName, fileIds) {
+  if (!courseId) throw new Error('courseId is required');
+  if (!Array.isArray(fileIds) || fileIds.length === 0) {
+    throw new Error('fileIds must be a non-empty array');
+  }
+
+  const fetch = (await import('node-fetch')).default || globalThis.fetch;
+  const r = await fetch(`http://127.0.0.1:4091/api/courses/${courseId}/files`);
+  const allFiles = await r.json();
+  if (!Array.isArray(allFiles)) {
+    throw new Error(allFiles.error || allFiles.message || 'Failed to fetch course files from Canvas');
+  }
+
+  const selectedSet = new Set(fileIds.map(String));
+  const targetFiles = allFiles.filter(f => selectedSet.has(String(f.id)));
+  if (targetFiles.length === 0) {
+    throw new Error('None of the selected files were found in Canvas course');
+  }
+
+  let canvasToken = '';
+  try {
+    const { execSync } = await import('child_process');
+    const out = execSync('sqlite3 /home/collegeagent/canvas/tokens.db "SELECT canvasToken FROM tokens LIMIT 1"', { encoding: 'utf-8' });
+    canvasToken = out.trim();
+  } catch (_) {}
+
+  const os = await import('os');
+  const pathMod = await import('path');
+  const fsMod = await import('fs');
+  const { execSync } = await import('child_process');
+
+  const tmpDir = fsMod.mkdtempSync(pathMod.join(os.tmpdir(), 'canvas_pkg_'));
+  const usedNames = new Set();
+  let downloadedCount = 0;
+
+  const downloadFile = async (f) => {
+    try {
+      let rawName = (f.display_name || f.filename || `file_${f.id}`).trim();
+      let name = rawName.replace(/[/\\?%*:|"<>]/g, '_');
+      if (usedNames.has(name)) {
+        const ext = pathMod.extname(name);
+        const base = pathMod.basename(name, ext);
+        let count = 1;
+        while (usedNames.has(`${base}_${count}${ext}`)) count++;
+        name = `${base}_${count}${ext}`;
+      }
+      usedNames.add(name);
+
+      const headers = {};
+      if (f.url && f.url.includes('bcourses.berkeley.edu') && canvasToken) {
+        headers['Authorization'] = `Bearer ${canvasToken}`;
+      }
+
+      const fileRes = await fetch(f.url, { headers });
+      if (!fileRes.ok) {
+        console.warn(`[Package Files] Failed to download file ${f.id} (${f.display_name}): HTTP ${fileRes.status}`);
+        return;
+      }
+      const arrayBuf = await fileRes.arrayBuffer();
+      fsMod.writeFileSync(pathMod.join(tmpDir, name), Buffer.from(arrayBuf));
+      downloadedCount++;
+    } catch (err) {
+      console.warn(`[Package Files] Error downloading file ${f.id}:`, err.message);
+    }
+  };
+
+  const chunkSize = 5;
+  for (let i = 0; i < targetFiles.length; i += chunkSize) {
+    const chunk = targetFiles.slice(i, i + chunkSize);
+    await Promise.all(chunk.map(downloadFile));
+  }
+
+  if (downloadedCount === 0) {
+    try { fsMod.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    throw new Error('Failed to download any of the selected files');
+  }
+
+  const zipsDir = pathMod.join(os.tmpdir(), 'canvas_zips');
+  if (!fsMod.existsSync(zipsDir)) fsMod.mkdirSync(zipsDir, { recursive: true });
+
+  const downloadId = uuidv4();
+  const cleanCourse = (courseName || `Course_${courseId}`).replace(/[/\\?%*:|"<>]/g, '_').trim();
+  const zipFileName = `${cleanCourse}_files.zip`;
+  const targetZipPath = pathMod.join(zipsDir, `${downloadId}.zip`);
+
+  execSync(`zip -q -r "${targetZipPath}" .`, { cwd: tmpDir });
+  try { fsMod.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+
+  const stat = fsMod.statSync(targetZipPath);
+  const result = {
+    downloadId,
+    filePath: targetZipPath,
+    fileName: zipFileName,
+    createdAt: Date.now(),
+    size: stat.size,
+    totalFiles: downloadedCount,
+  };
+  zipDownloadStore.set(downloadId, result);
+  return result;
+}
+
+app.post('/api/canvas/package-files', async (req, res) => {
+  try {
+    const { courseId, courseName, fileIds } = req.body;
+    if (!courseId) return res.status(400).json({ error: 'courseId required' });
+    if (!fileIds || !Array.isArray(fileIds) || fileIds.length === 0) {
+      return res.status(400).json({ error: 'fileIds must be a non-empty array' });
+    }
+    const result = await packageCanvasCourseFiles(courseId, courseName, fileIds);
+    res.json({
+      success: true,
+      downloadId: result.downloadId,
+      downloadUrl: `/api/canvas/download-zip/${result.downloadId}`,
+      fileName: result.fileName,
+      totalFiles: result.totalFiles,
+      size: result.size,
+    });
+  } catch (e) {
+    console.error('[Package Files] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/canvas/download-zip/:downloadId', (req, res) => {
+  const item = zipDownloadStore.get(req.params.downloadId);
+  if (!item || !existsSync(item.filePath)) {
+    return res.status(404).send('Download file not found or expired');
+  }
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(item.fileName)}"; filename*=UTF-8''${encodeURIComponent(item.fileName)}`);
+  res.download(item.filePath, item.fileName);
+});
+
+app.get('/api/canvas/download-course-files', async (req, res) => {
+  try {
+    const { courseId, courseName, fileIds } = req.query;
+    if (!courseId) return res.status(400).send('courseId required');
+    const ids = (fileIds || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (ids.length === 0) return res.status(400).send('fileIds required');
+    const result = await packageCanvasCourseFiles(courseId, courseName, ids);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(result.fileName)}"; filename*=UTF-8''${encodeURIComponent(result.fileName)}`);
+    res.download(result.filePath, result.fileName);
+  } catch (e) {
+    res.status(500).send(e.message);
   }
 });
 

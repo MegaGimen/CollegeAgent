@@ -19,6 +19,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { addSnapshot } from './memory_versions.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MEMORIES_DIR = path.join(__dirname, 'memories');
@@ -56,13 +57,12 @@ function writeMem(userId, content) {
 const TOOLS = [
   {
     name: 'read_memory',
-    description: 'Read the user\'s stored identity/preferences (name, major, schedule, etc). NOT for conversation history.',
+    description: 'Read the user\'s stored memory/profile markdown file (identity, preferences, schedules, etc). Use this when you need to inspect or verify current memory content.',
     inputSchema: {
       type: 'object',
       properties: {
-        userId: { type: 'string', description: 'Unique user identifier.' },
+        userId: { type: 'string', description: 'Unique user identifier (automatically injected by system).' },
       },
-      required: ['userId'],
     },
   },
   {
@@ -125,7 +125,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!content.includes(args.old_str)) {
           return err(`old_str not found. First 500 chars:\n${content.slice(0, 500)}`);
         }
-        writeMem(args.userId, content.replace(args.old_str, args.new_str));
+        // 1. Snapshot before agent edit
+        addSnapshot(args.userId, content, 'agent_pre', 'Agent Edit (Before str_replace)');
+
+        const newContent = content.replace(args.old_str, args.new_str);
+        writeMem(args.userId, newContent);
+
+        // 2. Snapshot after agent edit
+        addSnapshot(args.userId, newContent, 'agent_post', 'Agent Edit (After str_replace)');
         return ok('Memory updated (str_replace).');
       }
 
@@ -134,8 +141,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const content = readMem(args.userId);
         const lines = content.split('\n');
         const idx = Math.min(Math.max(0, args.line), lines.length);
+
+        // 1. Snapshot before agent edit
+        addSnapshot(args.userId, content, 'agent_pre', `Agent Edit (Before insert line ${args.line})`);
+
         lines.splice(idx, 0, args.text);
-        writeMem(args.userId, lines.join('\n'));
+        const newContent = lines.join('\n');
+        writeMem(args.userId, newContent);
+
+        // 2. Snapshot after agent edit
+        addSnapshot(args.userId, newContent, 'agent_post', `Agent Edit (After insert line ${args.line})`);
         return ok(`Memory updated (insert after line ${args.line}).`);
       }
 

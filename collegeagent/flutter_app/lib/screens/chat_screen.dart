@@ -206,7 +206,7 @@ class _ChatScreenState extends State<ChatScreen> {
       buf.writeln('│ Graph Nodes (${tc.graphNodes.length}):');
       for (var n = 0; n < tc.graphNodes.length; n++) {
         final node = tc.graphNodes[n];
-        buf.writeln('│   ${n + 1}. ${node.title}');
+        buf.writeln('│   Node [${node.sourceId}]: ${node.title}');
         if (node.sourceUrl != null) {
           buf.writeln('│      URL: ${node.sourceUrl}');
         }
@@ -387,7 +387,42 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        title: Row(
+          children: [
+            if (widget.session.mode == 'teaching') ...[
+              Container(
+                margin: const EdgeInsets.only(right: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFF10B981)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.school, size: 14, color: Color(0xFF10B981)),
+                    SizedBox(width: 4),
+                    Text(
+                      '教学复习',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF10B981),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            Expanded(
+              child: Text(
+                title,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         backgroundColor: const Color(0xFF0C132C),
         foregroundColor: Colors.white,
         elevation: 0,

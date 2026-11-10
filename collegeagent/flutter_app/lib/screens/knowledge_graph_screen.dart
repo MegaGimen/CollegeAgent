@@ -27,7 +27,7 @@ class _KgNode {
   });
 
   factory _KgNode.fromJson(Map<String, dynamic> json, int hop) {
-    return _KgNode(
+    final node = _KgNode(
       nodeId: json['nodeId'] as String? ?? '',
       title: json['title'] as String? ?? 'Untitled',
       sourceUrl: json['sourceUrl'] as String?,
@@ -38,6 +38,19 @@ class _KgNode {
           [],
       hop: hop,
     );
+    if (json['content'] != null && (json['content'] as String).isNotEmpty) {
+      String content = json['content'] as String;
+      final contentIdx = content.indexOf('## Content');
+      if (contentIdx != -1) {
+        content = content.substring(contentIdx + '## Content'.length).trim();
+      }
+      content = content
+          .split('\n')
+          .map((l) => l.replaceFirst(RegExp(r'^\s*\d+\|'), ''))
+          .join('\n');
+      node._cachedContent = content;
+    }
+    return node;
   }
 }
 
@@ -121,15 +134,17 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
         });
         return;
       }
-      _addNode(sourceNode);
+      _addNode(sourceNode, widget.nodeId);
 
       // BFS for 2 hops
       final queue = <(String nodeId, int hop)>[];
       for (final link in sourceNode.outboundLinks) {
-        if (link.nodeId != null) queue.add((link.nodeId!, 1));
+        if (link.nodeId != null && link.nodeId!.isNotEmpty) {
+          queue.add((link.nodeId!, 1));
+        }
       }
 
-      final visited = <String>{widget.nodeId};
+      final visited = <String>{widget.nodeId, sourceNode.nodeId};
       int head = 0;
 
       while (head < queue.length) {
@@ -140,12 +155,12 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
         final node = await _fetchNode(nid, hop);
         if (node == null) continue;
 
-        _addNode(node);
+        _addNode(node, nid);
         final toIdx = _nodes.length - 1;
 
         // Add edges from all previously-known nodes that link to this one
         for (final existingNode in _nodes) {
-          if (existingNode.outboundLinks.any((l) => l.nodeId == nid)) {
+          if (existingNode.outboundLinks.any((l) => l.nodeId == nid || l.nodeId == node.nodeId)) {
             final existingIdx = _nodeIdToIdx[existingNode.nodeId];
             if (existingIdx != null) {
               _edges.add(_GraphEdge(existingIdx, toIdx));
@@ -155,7 +170,9 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
 
         if (hop < 2) {
           for (final link in node.outboundLinks) {
-            if (link.nodeId != null && !visited.contains(link.nodeId)) {
+            if (link.nodeId != null &&
+                link.nodeId!.isNotEmpty &&
+                !visited.contains(link.nodeId)) {
               queue.add((link.nodeId!, hop + 1));
             }
           }
@@ -194,10 +211,11 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
   }
 
   Future<_KgNode?> _fetchNode(String nodeId, int hop) async {
+    if (nodeId.isEmpty) return null;
     if (_nodeIdToIdx.containsKey(nodeId)) return null; // already loaded
     try {
       final res = await _client.get(
-        Uri.parse('$_baseUrl/api/graph/node/$nodeId'),
+        Uri.parse('$_baseUrl/api/graph/node/${Uri.encodeComponent(nodeId)}'),
       );
       if (res.statusCode == 200) {
         return _KgNode.fromJson(
@@ -207,9 +225,15 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
     return null;
   }
 
-  void _addNode(_KgNode node) {
-    _nodeIdToIdx[node.nodeId] = _nodes.length;
+  void _addNode(_KgNode node, [String? requestedId]) {
+    final idx = _nodes.length;
     _nodes.add(node);
+    if (node.nodeId.isNotEmpty) {
+      _nodeIdToIdx[node.nodeId] = idx;
+    }
+    if (requestedId != null && requestedId.isNotEmpty && requestedId != node.nodeId) {
+      _nodeIdToIdx[requestedId] = idx;
+    }
   }
 
   /// Simple force-directed layout in a bounded area.
@@ -344,7 +368,7 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
   Color _hopColor(int hop) {
     switch (hop) {
       case 0:
-        return const Color(0xFF6C63FF);
+        return const Color(0xFF0C132C);
       case 1:
         return const Color(0xFF2196F3);
       case 2:
@@ -362,7 +386,7 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
           '页面跳转关系',
           style: const TextStyle(fontSize: 16),
         ),
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: const Color(0xFF0C132C),
         foregroundColor: Colors.white,
         actions: [
           Padding(
@@ -461,7 +485,7 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
                                           FloatingActionButton.small(
                                             heroTag: 'graph_zoom_in',
                                             onPressed: _zoomIn,
-                                            backgroundColor: const Color(0xFF6C63FF),
+                                            backgroundColor: const Color(0xFF0C132C),
                                             foregroundColor: Colors.white,
                                             tooltip: '放大',
                                             child: const Icon(Icons.add, size: 20),
@@ -470,7 +494,7 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
                                           FloatingActionButton.small(
                                             heroTag: 'graph_zoom_out',
                                             onPressed: _zoomOut,
-                                            backgroundColor: const Color(0xFF6C63FF),
+                                            backgroundColor: const Color(0xFF0C132C),
                                             foregroundColor: Colors.white,
                                             tooltip: '缩小',
                                             child: const Icon(Icons.remove, size: 20),
@@ -534,7 +558,7 @@ class _KnowledgeGraphScreenState extends State<KnowledgeGraphScreen> {
         content = node._cachedContent!;
       } else {
         final res = await _client.get(
-          Uri.parse('$_baseUrl/api/graph/node/${node.nodeId}'),
+          Uri.parse('$_baseUrl/api/graph/node/${Uri.encodeComponent(node.nodeId)}'),
         );
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body) as Map<String, dynamic>;
@@ -741,7 +765,7 @@ class _NodeContentScreen extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: const Color(0xFF0C132C),
         foregroundColor: Colors.white,
       ),
       body: SafeArea(
@@ -819,6 +843,25 @@ class _NodeContentScreen extends StatelessWidget {
                 child: SelectionArea(
                   child: MarkdownBody(
                     data: content,
+                    onTapLink: (text, href, title) async {
+                      if (href == null || href.trim().isEmpty) return;
+                      try {
+                        String urlStr = href.trim();
+                        if (!urlStr.startsWith('http://') &&
+                            !urlStr.startsWith('https://') &&
+                            !urlStr.startsWith('mailto:')) {
+                          urlStr = 'https://$urlStr';
+                        }
+                        final uri = Uri.parse(urlStr);
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                          webOnlyWindowName: '_blank',
+                        );
+                      } catch (e) {
+                        debugPrint('Failed to open URL $href: $e');
+                      }
+                    },
                   styleSheet: MarkdownStyleSheet(
                     p: const TextStyle(fontSize: 14, height: 1.6),
                     h1: const TextStyle(
@@ -841,6 +884,13 @@ class _NodeContentScreen extends StatelessWidget {
                         left: BorderSide(
                             color: Colors.grey.shade400, width: 3),
                       ),
+                    ),
+                    tableColumnWidth: const IntrinsicColumnWidth(),
+                    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                    tableBorder: TableBorder.all(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                 ),

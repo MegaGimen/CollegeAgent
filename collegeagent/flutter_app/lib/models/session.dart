@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class SessionModel {
   final String id;
   final String userId;
@@ -10,6 +12,10 @@ class SessionModel {
   String? latestAssistant;
   int msgCount;
   bool pinned;
+  final String mode;
+  final String? courseId;
+  final String? courseName;
+  final List<String> fileIds;
 
   SessionModel({
     required this.id,
@@ -23,6 +29,10 @@ class SessionModel {
     this.latestAssistant,
     this.msgCount = 0,
     this.pinned = false,
+    this.mode = 'regular',
+    this.courseId,
+    this.courseName,
+    this.fileIds = const [],
   });
 
   factory SessionModel.fromJson(Map<String, dynamic> json) {
@@ -38,6 +48,16 @@ class SessionModel {
       latestAssistant: (json['latestAssistant'] ?? json['latest_assistant']) as String?,
       msgCount: (json['msgCount'] ?? json['msg_count'] ?? 0) as int,
       pinned: _parseBool(json['pinned']),
+      mode: (json['mode'] as String?) ?? 'regular',
+      courseId: (json['courseId'] ?? json['course_id']) as String?,
+      courseName: (json['courseName'] ?? json['course_name']) as String?,
+      fileIds: json['fileIds'] != null
+          ? (json['fileIds'] as List).map((e) => e.toString()).toList()
+          : (json['file_ids'] != null
+              ? (json['file_ids'] is String
+                  ? (jsonDecode(json['file_ids']) as List).map((e) => e.toString()).toList()
+                  : (json['file_ids'] as List).map((e) => e.toString()).toList())
+              : []),
     );
   }
 
@@ -53,6 +73,10 @@ class SessionModel {
     'latestAssistant': latestAssistant,
     'msgCount': msgCount,
     'pinned': pinned,
+    'mode': mode,
+    'courseId': courseId,
+    'courseName': courseName,
+    'fileIds': fileIds,
   };
 
   // Helper: parse bool from int (SQLite) or bool (JSON/server)
@@ -75,5 +99,9 @@ class SessionModel {
     'last_active': lastActive,
     'created_at': createdAt,
     'pinned': pinned ? 1 : 0,
+    'mode': mode,
+    'course_id': courseId,
+    'course_name': courseName,
+    'file_ids': jsonEncode(fileIds),
   };
 }

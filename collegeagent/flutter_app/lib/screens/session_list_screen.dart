@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../providers/session_provider.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/session_tile.dart';
+import '../widgets/create_teaching_dialog.dart';
 import 'chat_screen.dart';
 import 'memory_screen.dart';
 
@@ -54,6 +55,15 @@ class _SessionListScreenState extends State<SessionListScreen> {
       appBar: AppBar(
         title: const Text('Chats'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_zip_outlined),
+            tooltip: '课程文件下载',
+            onPressed: () async {
+              if (user != null) {
+                await CreateTeachingDialog.show(context, user.userId);
+              }
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.memory),
             tooltip: 'Memory',
@@ -147,7 +157,7 @@ class _SessionListScreenState extends State<SessionListScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: user != null ? () => _createNewSession(user.userId) : null,
-        backgroundColor: const Color(0xFF6C63FF),
+        backgroundColor: const Color(0xFF0C132C),
         child: const Icon(Icons.add, color: Colors.white),
       ),
     );

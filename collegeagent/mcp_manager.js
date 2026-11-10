@@ -18,8 +18,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const NODE_BIN = '/root/.nvm/versions/node/v24.12.0/bin/node';
 
-// Tools to exclude from DeepSeek tool list (read_memory is injected into system prompt)
-const EXCLUDED_TOOLS = new Set(['read_memory', 'list_tools']);
+// Tools to exclude from DeepSeek tool list
+const EXCLUDED_TOOLS = new Set(['list_tools']);
 
 class McpManager {
   /** @type {Object<string, { client: Client, tools: Array, transport: StdioClientTransport }>} */
@@ -106,11 +106,22 @@ class McpManager {
           if (params.properties?.nodeId) {
             params.properties.sourceId = {
               type: 'number',
-              description: 'The source ID (small integer from search/read/expand results) of the node to read or expand',
+              description: 'The source ID (small integer from search, expand, or get_files results) of the item to read or expand',
             };
             delete params.properties.nodeId;
           }
-          if (Array.isArray(params.required)) {
+          if (t.name === 'read') {
+            if (!params.properties) params.properties = {};
+            params.properties.courseId = {
+              type: 'string',
+              description: 'Optional course ID if reading a Canvas course file directly',
+            };
+            params.properties.fileId = {
+              type: 'string',
+              description: 'Optional Canvas file ID if reading a Canvas course file directly',
+            };
+            params.required = [];
+          } else if (Array.isArray(params.required)) {
             params.required = params.required.map(r => r === 'nodeId' ? 'sourceId' : r);
           }
           // expand accepts either sourceId or url — clear required so neither is mandatory
@@ -124,9 +135,11 @@ class McpManager {
         if (t.name === 'search') {
           desc = 'Search the knowledge graph across multiple vaults (public, course, Gmail, personal). Returns ONLY short preview snippets and sourceIds. Does NOT return full document content or line numbers. You MUST call read(sourceId) on relevant result(s) to fetch the full document before answering or citing.';
         } else if (t.name === 'read') {
-          desc = 'Read the full content of a source by its sourceId (the small integer from search/read/expand results). Returns full document with line numbers ( 1|..., 2|...) and outbound links. Always call this to read documents found via search.';
+          desc = 'Read the full content of a source by its sourceId (from search results, or files listed via get_files). Returns full document with line numbers ( 1|..., 2|...) and outbound links. Supports reading vault notes, web pages, emails, and course files (PDF, PPTX, DOCX, XLSX, etc.). Always call this to read documents found via search or get_files.';
         } else if (t.name === 'expand') {
           desc = 'Two modes: (1) expand(url) — crawl a URL from web_search results, save to vault, return full line-numbered content with outbound links and a sourceId. Use this after web_search to read specific pages. (2) expand(sourceId) — read all 1-hop neighbors of an existing graph node. Provide exactly one of: url or sourceId.';
+        } else if (t.name === 'get_files') {
+          desc = 'Get a catalog list of files for a course (IDs, names, sizes). Files listed here receive numeric sourceIds and can be read in full (PDF, PPTX, DOCX, XLSX, etc.) with line numbers by calling read(sourceId).';
         }
 
         tools.push({
@@ -147,20 +160,21 @@ class McpManager {
    * Returns the text result or null on failure.
    */
   async callTool(name, args) {
+    const normalizedName = typeof name === 'string' ? name.replace(/-/g, '_') : name;
     for (const { client } of Object.values(this.servers)) {
       try {
         // Check if this server has the tool
         const { tools } = await client.listTools();
-        const hasTool = tools.some((t) => t.name === name);
+        const hasTool = tools.some((t) => t.name === normalizedName || t.name === name);
         if (!hasTool) continue;
 
-        const res = await client.callTool({ name, arguments: args });
+        const res = await client.callTool({ name: normalizedName, arguments: args });
         return res?.content?.[0]?.text ?? null;
       } catch {
         // This server doesn't have the tool or call failed, try next
       }
     }
-    console.error(`⚠️  Tool not found: ${name}`);
+    console.error(`⚠️  Tool not found: ${name} (normalized: ${normalizedName})`);
     return null;
   }
 

@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-import "dotenv/config";
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import path from 'path';
+const __filename_mcp_env = fileURLToPath(import.meta.url);
+const __dirname_mcp_env = path.dirname(__filename_mcp_env);
+dotenv.config({ path: path.join(__dirname_mcp_env, '..', '.env') });
+
 /**
  * Networker MCP Server
  * 
@@ -53,7 +59,6 @@ const BRAVE_SEARCH_URL = 'https://api.search.brave.com/res/v1/web/search';
 const NETWORKER_API_URL = process.env.NETWORKER_API_URL || 'http://127.0.0.1:4090';
 
 // MCP assets directory (where crawled vault files are saved)
-import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 const __filename_mcp = fileURLToPath(import.meta.url);
 const __dirname_mcp = dirname(__filename_mcp);
@@ -162,9 +167,6 @@ async function crawlPagesSync(urls, vaultDir) {
   const API_FIRECRAWL_URL = 'https://api.firecrawl.dev/v1/scrape';
   const FIRECRAWL_API_KEY = process.env.FIRECRAWL_API_KEY || null;
 
-  const { existsSync } = require('fs');
-  const { mkdir, writeFile } = require('fs/promises');
-  const { join } = require('path');
 
   if (!existsSync(vaultDir)) {
     await mkdir(vaultDir, { recursive: true });

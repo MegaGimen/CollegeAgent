@@ -50,6 +50,8 @@ class _SessionTileState extends State<SessionTile> {
   // ── Compact tile (sidebar / Gemini style) ──────────────────────────────────
 
   Widget _buildCompactTile(BuildContext context, String title) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -61,17 +63,27 @@ class _SessionTileState extends State<SessionTile> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: widget.selected
-                ? const Color(0xFF6C63FF).withValues(alpha: 0.1)
+                ? (isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C).withValues(alpha: 0.1))
                 : _hovered
-                    ? Colors.grey.shade200
+                    ? (isDark ? const Color(0xFF01385F).withValues(alpha: 0.5) : Colors.grey.shade200)
                     : Colors.transparent,
+            border: Border.all(
+              color: widget.selected
+                  ? (isDark ? const Color(0xFF1E4E79) : Colors.transparent)
+                  : Colors.transparent,
+            ),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
               if (widget.session.pinned) ...[
                 Icon(Icons.push_pin,
-                    size: 14, color: Colors.grey.shade500),
+                    size: 14, color: isDark ? const Color(0xFF64B5F6) : Colors.grey.shade500),
+                const SizedBox(width: 6),
+              ],
+              if (widget.session.mode == 'teaching') ...[
+                const Icon(Icons.school,
+                    size: 14, color: Color(0xFF10B981)),
                 const SizedBox(width: 6),
               ],
               Expanded(
@@ -85,8 +97,8 @@ class _SessionTileState extends State<SessionTile> {
                         ? FontWeight.w600
                         : FontWeight.w400,
                     color: widget.selected
-                        ? const Color(0xFF6C63FF)
-                        : Colors.black87,
+                        ? (isDark ? Colors.white : const Color(0xFF0C132C))
+                        : (isDark ? const Color(0xFFCBD5E1) : Colors.black87),
                   ),
                 ),
               ),
@@ -106,6 +118,7 @@ class _SessionTileState extends State<SessionTile> {
   // ── Full tile (non-compact, for drawer on mobile with subtitle) ────────────
 
   Widget _buildFullTile(BuildContext context, String title) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     String subtitle;
     if (widget.isStreaming) {
       subtitle = 'Generating...';
@@ -121,17 +134,23 @@ class _SessionTileState extends State<SessionTile> {
 
     return ListTile(
       selected: widget.selected,
-      selectedTileColor: const Color(0xFF6C63FF).withValues(alpha: 0.08),
+      selectedTileColor: isDark
+          ? const Color(0xFF01385F)
+          : const Color(0xFF0C132C).withValues(alpha: 0.08),
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
           CircleAvatar(
             backgroundColor: widget.selected
-                ? const Color(0xFF6C63FF)
-                : Colors.grey.shade300,
+                ? (isDark ? const Color(0xFF2196F3) : const Color(0xFF0C132C))
+                : (isDark ? const Color(0xFF01385F) : Colors.grey.shade300),
             child: Icon(
-              widget.session.pinned ? Icons.push_pin : Icons.chat,
-              color: Colors.white,
+              widget.session.pinned
+                  ? Icons.push_pin
+                  : (widget.session.mode == 'teaching' ? Icons.school : Icons.chat),
+              color: widget.session.mode == 'teaching' && !widget.session.pinned
+                  ? const Color(0xFF10B981)
+                  : Colors.white,
               size: 18,
             ),
           ),
@@ -165,6 +184,7 @@ class _SessionTileState extends State<SessionTile> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
+          color: isDark ? Colors.white : Colors.black87,
           fontWeight: widget.unreadCount > 0 ? FontWeight.w700 : FontWeight.w600,
         ),
       ),
@@ -174,17 +194,21 @@ class _SessionTileState extends State<SessionTile> {
                 width: 12,
                 height: 12,
                 child: CircularProgressIndicator(
-                    strokeWidth: 1.5, color: const Color(0xFF6C63FF)),
+                    strokeWidth: 1.5,
+                    color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0C132C)),
               ),
               const SizedBox(width: 6),
               Text(subtitle,
-                  style: const TextStyle(
-                      color: Color(0xFF6C63FF), fontStyle: FontStyle.italic)),
+                  style: TextStyle(
+                      color: isDark ? const Color(0xFF64B5F6) : const Color(0xFF0C132C),
+                      fontStyle: FontStyle.italic)),
             ])
           : Text(subtitle,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: Colors.grey.shade600)),
+              style: TextStyle(
+                color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade600,
+              )),
       trailing: _buildMenuButton(context),
       onTap: widget.onTap,
     );
@@ -193,13 +217,14 @@ class _SessionTileState extends State<SessionTile> {
   // ── Three-dot popup menu ──────────────────────────────────────────────────
 
   Widget _buildMenuButton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SizedBox(
       width: 28,
       height: 28,
       child: PopupMenuButton<String>(
         padding: EdgeInsets.zero,
         icon: Icon(Icons.more_vert,
-            size: 18, color: Colors.grey.shade600),
+            size: 18, color: isDark ? Colors.white70 : Colors.grey.shade600),
         onSelected: (value) {
           switch (value) {
             case 'pin':

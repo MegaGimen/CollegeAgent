@@ -372,7 +372,7 @@ class _CanvasCoursesScreenState extends State<CanvasCoursesScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Icon(Icons.school_outlined, color: Color(0xFF6C63FF)),
+            const Icon(Icons.school_outlined, color: Color(0xFF0C132C)),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -431,7 +431,7 @@ class _CanvasCoursesScreenState extends State<CanvasCoursesScreen> {
                                 'Course: ${_selectedCourse!['name']} (${_selectedCourse!['id']})',
                                 style: TextStyle(
                                   fontWeight: _selectedModule == null ? FontWeight.bold : FontWeight.normal,
-                                  color: const Color(0xFF6C63FF),
+                                  color: const Color(0xFF0C132C),
                                 ),
                               ),
                             ),
@@ -495,7 +495,7 @@ class _CanvasCoursesScreenState extends State<CanvasCoursesScreen> {
           margin: const EdgeInsets.only(bottom: 12),
           child: ListTile(
             leading: const CircleAvatar(
-              backgroundColor: Color(0xFF6C63FF),
+              backgroundColor: Color(0xFF0C132C),
               child: Icon(Icons.book, color: Colors.white),
             ),
             title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -769,7 +769,7 @@ class _CanvasCoursesScreenState extends State<CanvasCoursesScreen> {
               const Spacer(),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF6C63FF),
+                  backgroundColor: const Color(0xFF0C132C),
                   foregroundColor: Colors.white,
                 ),
                 icon: _submittingBatch
@@ -1085,7 +1085,7 @@ class _PageDetailModalState extends State<_PageDetailModal>
             const SizedBox(height: 8),
             TabBar(
               controller: _tabController,
-              labelColor: const Color(0xFF6C63FF),
+              labelColor: const Color(0xFF0C132C),
               tabs: const [
                 Tab(text: 'AI 内容总结'),
                 Tab(text: 'HTML 网页渲染 (Canvas 原生 HTML)'),
@@ -1111,6 +1111,34 @@ class _PageDetailModalState extends State<_PageDetailModal>
                               child: SelectionArea(
                                 child: Markdown(
                                   data: _aiSummary,
+                                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                                    tableColumnWidth: const IntrinsicColumnWidth(),
+                                    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                                    tableBorder: TableBorder.all(
+                                      color: const Color(0xFFCBD5E1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  onTapLink: (text, href, title) async {
+                                    if (href == null || href.trim().isEmpty) return;
+                                    try {
+                                      String urlStr = href.trim();
+                                      if (!urlStr.startsWith('http://') &&
+                                          !urlStr.startsWith('https://') &&
+                                          !urlStr.startsWith('mailto:')) {
+                                        urlStr = 'https://$urlStr';
+                                      }
+                                      final uri = Uri.parse(urlStr);
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.externalApplication,
+                                        webOnlyWindowName: '_blank',
+                                      );
+                                    } catch (e) {
+                                      debugPrint('Failed to open URL $href: $e');
+                                    }
+                                  },
                                 ),
                               ),
                             ),
@@ -1124,12 +1152,40 @@ class _PageDetailModalState extends State<_PageDetailModal>
                                 ),
                               ),
                             ),
-                            // Tab 2: Clean Markdown Rendering
+                            // Tab 3: Clean Markdown Rendering
                             Padding(
                               padding: const EdgeInsets.all(12),
                               child: SelectionArea(
                                 child: Markdown(
                                   data: _markdownContent,
+                                  styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                                    tableColumnWidth: const IntrinsicColumnWidth(),
+                                    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                    tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                                    tableBorder: TableBorder.all(
+                                      color: const Color(0xFFCBD5E1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                  ),
+                                  onTapLink: (text, href, title) async {
+                                    if (href == null || href.trim().isEmpty) return;
+                                    try {
+                                      String urlStr = href.trim();
+                                      if (!urlStr.startsWith('http://') &&
+                                          !urlStr.startsWith('https://') &&
+                                          !urlStr.startsWith('mailto:')) {
+                                        urlStr = 'https://$urlStr';
+                                      }
+                                      final uri = Uri.parse(urlStr);
+                                      await launchUrl(
+                                        uri,
+                                        mode: LaunchMode.externalApplication,
+                                        webOnlyWindowName: '_blank',
+                                      );
+                                    } catch (e) {
+                                      debugPrint('Failed to open URL $href: $e');
+                                    }
+                                  },
                                 ),
                               ),
                             ),

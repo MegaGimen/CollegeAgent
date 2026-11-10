@@ -28,8 +28,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             summary: { type: 'string', description: 'Title of the event' },
             description: { type: 'string', description: 'Description of the event' },
-            startTime: { type: 'string', description: 'Start time in ISO format (e.g. 2026-08-26T09:00:00+08:00)' },
-            endTime: { type: 'string', description: 'End time in ISO format' },
+            startTime: { type: 'string', description: 'Start time in ISO format with timezone (e.g. 2026-08-26T09:00:00-07:00 for Pacific Time PDT or 2026-08-26T09:00:00+08:00)' },
+            endTime: { type: 'string', description: 'End time in ISO format with timezone (e.g. 2026-08-26T10:00:00-07:00 for Pacific Time PDT or 2026-08-26T10:00:00+08:00)' },
             userId: { type: 'string', description: 'The userId (injected by system)' }
           },
           required: ['summary', 'startTime', 'endTime', 'userId']

@@ -24,7 +24,7 @@ class LocalDb {
     final path = join(dbPath, 'nanoclaw_chat.db');
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute('DROP TABLE IF EXISTS sessions');
@@ -45,6 +45,13 @@ class LocalDb {
           // v6: add parent_id column
           await db.execute('ALTER TABLE sessions ADD COLUMN parent_id TEXT');
         }
+        if (oldVersion < 7) {
+          // v7: add mode, course_id, course_name, file_ids columns
+          await db.execute('ALTER TABLE sessions ADD COLUMN mode TEXT DEFAULT "regular"');
+          await db.execute('ALTER TABLE sessions ADD COLUMN course_id TEXT');
+          await db.execute('ALTER TABLE sessions ADD COLUMN course_name TEXT');
+          await db.execute('ALTER TABLE sessions ADD COLUMN file_ids TEXT');
+        }
         await db.execute('''
           CREATE TABLE IF NOT EXISTS sessions (
             id TEXT PRIMARY KEY,
@@ -56,7 +63,11 @@ class LocalDb {
             msg_count INTEGER DEFAULT 0,
             last_active TEXT,
             created_at TEXT NOT NULL,
-            pinned INTEGER DEFAULT 0
+            pinned INTEGER DEFAULT 0,
+            mode TEXT DEFAULT "regular",
+            course_id TEXT,
+            course_name TEXT,
+            file_ids TEXT
           )
         ''');
       },
@@ -72,7 +83,11 @@ class LocalDb {
             msg_count INTEGER DEFAULT 0,
             last_active TEXT,
             created_at TEXT NOT NULL,
-            pinned INTEGER DEFAULT 0
+            pinned INTEGER DEFAULT 0,
+            mode TEXT DEFAULT "regular",
+            course_id TEXT,
+            course_name TEXT,
+            file_ids TEXT
           )
         ''');
         await db.execute('''

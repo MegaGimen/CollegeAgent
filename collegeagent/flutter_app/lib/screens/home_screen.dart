@@ -13,11 +13,14 @@ import '../providers/theme_provider.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/session_tile.dart';
+import '../widgets/create_teaching_dialog.dart';
 import 'memory_screen.dart';
 import 'canvas_courses_screen.dart';
 import 'calendar_screen.dart';
 import 'gmail_screen.dart';
 import 'personal_vault_screen.dart';
+import 'luma_events_screen.dart';
+import 'luma_sync_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -97,6 +100,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openTeachingMode() async {
+    final auth = context.read<AuthProvider>();
+    if (auth.user == null) return;
+    final session = await CreateTeachingDialog.show(context, auth.user!.userId);
+    if (session != null && mounted) {
+      _selectSession(session);
+    }
+  }
+
   void _selectSession(SessionModel session) {
     final auth = context.read<AuthProvider>();
     final chat = context.read<ChatProvider>();
@@ -172,6 +184,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.of(context).pop();
                   }
                 },
+                onTeachingMode: () {
+                  if (Navigator.of(context).canPop()) {
+                    Navigator.of(context).pop();
+                  }
+                  _openTeachingMode();
+                },
                 onSelectSession: (s) {
                   _selectSession(s);
                   if (Navigator.of(context).canPop()) {
@@ -198,6 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             setState(() => _desktopSidebarOpen = false);
                           },
                           onNewChat: _clearSelection,
+                          onTeachingMode: _openTeachingMode,
                           onSelectSession: _selectSession,
                           onLoadSessions: _refreshSessions,
                         ),
@@ -234,6 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _scaffoldKey.currentState?.openDrawer();
           }
         },
+        onTeachingMode: _openTeachingMode,
         onSend: (text) async {
           if (auth.user == null) return;
           await _createNewSession();
@@ -335,6 +355,7 @@ class _SessionSidebar extends StatelessWidget {
   final bool isDesktop;
   final VoidCallback onCloseSidebar;
   final VoidCallback onNewChat;
+  final VoidCallback onTeachingMode;
   final ValueChanged<SessionModel> onSelectSession;
   final Future<void> Function() onLoadSessions;
 
@@ -347,6 +368,7 @@ class _SessionSidebar extends StatelessWidget {
     required this.isDesktop,
     required this.onCloseSidebar,
     required this.onNewChat,
+    required this.onTeachingMode,
     required this.onSelectSession,
     required this.onLoadSessions,
   });
@@ -410,6 +432,10 @@ class _SessionSidebar extends StatelessWidget {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => CanvasCoursesScreen(userId: user!.userId)));
                       } else if (value == 'memory') {
                         Navigator.push(context, MaterialPageRoute(builder: (_) => MemoryScreen(userId: user!.userId)));
+                      } else if (value == 'luma') {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const LumaEventsScreen()));
+                      } else if (value == 'luma_sync') {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const LumaSyncScreen()));
                       }
                     },
                     itemBuilder: (BuildContext context) => [
@@ -443,6 +469,22 @@ class _SessionSidebar extends StatelessWidget {
                           Icon(Icons.memory_outlined, size: 18),
                           SizedBox(width: 8),
                           Text('Memory')
+                        ]),
+                      ),
+                      const PopupMenuItem(
+                        value: 'luma',
+                        child: Row(children: [
+                          Icon(Icons.explore_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Luma 活动')
+                        ]),
+                      ),
+                      const PopupMenuItem(
+                        value: 'luma_sync',
+                        child: Row(children: [
+                          Icon(Icons.cloud_sync_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('Luma Vault 同步')
                         ]),
                       ),
                       const PopupMenuDivider(),
@@ -491,6 +533,39 @@ class _SessionSidebar extends StatelessWidget {
                           )),
                       const Spacer(),
                       Icon(Icons.add, size: 18, color: isDark ? Colors.white70 : Colors.grey.shade600),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            // Teaching mode button
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: InkWell(
+                onTap: onTeachingMode,
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
+                    border: Border.all(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.folder_zip_outlined, size: 18, color: Color(0xFF10B981)),
+                      SizedBox(width: 10),
+                      Text('课程文件下载',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF10B981),
+                          )),
+                      Spacer(),
+                      Icon(Icons.download, size: 18, color: Color(0xFF10B981)),
                     ],
                   ),
                 ),
@@ -631,6 +706,7 @@ class _WelcomeView extends StatelessWidget {
   final bool isDesktop;
   final bool desktopSidebarOpen;
   final VoidCallback onToggleSidebar;
+  final VoidCallback onTeachingMode;
   final ValueChanged<String> onSend;
 
   const _WelcomeView({
@@ -638,6 +714,7 @@ class _WelcomeView extends StatelessWidget {
     required this.isDesktop,
     required this.desktopSidebarOpen,
     required this.onToggleSidebar,
+    required this.onTeachingMode,
     required this.onSend,
   });
 
@@ -716,30 +793,51 @@ class _WelcomeView extends StatelessWidget {
                         child: _WelcomeInput(onSend: onSend),
                       ),
                       const SizedBox(height: 20),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          backgroundColor: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
-                          foregroundColor: Colors.white,
-                          side: isDark ? const BorderSide(color: Color(0xFF1E4E79)) : null,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        ),
-                        icon: const Icon(Icons.school_outlined, size: 20),
-                        label: const Text(
-                          'Canvas 课程与图谱管理',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                        onPressed: () {
-                          final auth = context.read<AuthProvider>();
-                          if (auth.user != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CanvasCoursesScreen(userId: auth.user!.userId),
-                              ),
-                            );
-                          }
-                        },
+                      Wrap(
+                        spacing: 16,
+                        runSpacing: 12,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              backgroundColor: const Color(0xFF10B981),
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.folder_zip_outlined, size: 20),
+                            label: const Text(
+                              '课程文件下载',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: onTeachingMode,
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              backgroundColor: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
+                              foregroundColor: Colors.white,
+                              side: isDark ? const BorderSide(color: Color(0xFF1E4E79)) : null,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.school_outlined, size: 20),
+                            label: const Text(
+                              'Canvas 课程与图谱管理',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            onPressed: () {
+                              final auth = context.read<AuthProvider>();
+                              if (auth.user != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CanvasCoursesScreen(userId: auth.user!.userId),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -1107,7 +1205,7 @@ class _ChatViewState extends State<_ChatView> {
       buf.writeln('│ Graph Nodes (${tc.graphNodes.length}):');
       for (var n = 0; n < tc.graphNodes.length; n++) {
         final node = tc.graphNodes[n];
-        buf.writeln('│   Node [${node.nodeId}]: ${node.title}');
+        buf.writeln('│   Node [${node.sourceId}]: ${node.title}');
       }
     }
 
@@ -1194,6 +1292,10 @@ class _ChatViewState extends State<_ChatView> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
+                                if (tab.mode == 'teaching') ...[
+                                  const Icon(Icons.school, size: 13, color: Color(0xFF10B981)),
+                                  const SizedBox(width: 4),
+                                ],
                                 Flexible(
                                   child: Text(
                                     displayText,
@@ -1241,6 +1343,32 @@ class _ChatViewState extends State<_ChatView> {
                       tooltip: 'Back',
                       onPressed: widget.onBack,
                     ),
+                  if (widget.session.mode == 'teaching') ...[
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF10B981)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.school, size: 14, color: Color(0xFF10B981)),
+                          SizedBox(width: 4),
+                          Text(
+                            '教学复习',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF10B981),
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   Expanded(
                     child: Text(
                       title,

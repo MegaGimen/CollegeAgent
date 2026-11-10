@@ -1,0 +1,1 @@
+/home/collegeagent/canvas/mcp_server.js

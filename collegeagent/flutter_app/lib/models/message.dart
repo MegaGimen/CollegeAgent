@@ -2,12 +2,14 @@ import 'dart:convert';
 
 /// Represents a single node fetched from the knowledge graph.
 class GraphNode {
+  final int? sourceId;
   final String nodeId;
   final String title;
   final String? sourceUrl;
   final List<GraphLink> outboundLinks;
 
   GraphNode({
+    this.sourceId,
     required this.nodeId,
     required this.title,
     this.sourceUrl,
@@ -16,6 +18,7 @@ class GraphNode {
 
   factory GraphNode.fromJson(Map<String, dynamic> json) {
     return GraphNode(
+      sourceId: json['sourceId'] as int?,
       nodeId: json['nodeId'] as String? ?? '',
       title: json['title'] as String? ?? 'Untitled',
       sourceUrl: json['sourceUrl'] as String?,
@@ -29,14 +32,16 @@ class GraphNode {
 
 /// Represents an outbound link from a knowledge graph node.
 class GraphLink {
+  final int? sourceId;
   final String title;
   final String? nodeId;
 
-  GraphLink({required this.title, this.nodeId});
+  GraphLink({required this.title, this.nodeId, this.sourceId});
 
   factory GraphLink.fromJson(Map<String, dynamic> json) {
     return GraphLink(
       title: json['title'] as String? ?? '',
+      sourceId: json['sourceId'] as int?,
       nodeId: json['nodeId'] as String?,
     );
   }
@@ -120,6 +125,7 @@ class StreamSegment {
 class Citation {
   final int index;         // Sequential index in the text
   final String title;      // Source node title
+  final int? sourceId;     // Numeric source ID
   final String? nodeId;    // Graph node ID (null if not found in graph)
   final String? snippet;   // Text snippet from the source
   final String? sourceUrl; // Web URL (for web_search sources or graph node)
@@ -130,6 +136,7 @@ class Citation {
   Citation({
     required this.index,
     required this.title,
+    this.sourceId,
     this.nodeId,
     this.snippet,
     this.sourceUrl,
@@ -142,6 +149,7 @@ class Citation {
     return Citation(
       index: json['index'] as int? ?? 0,
       title: json['title'] as String? ?? '',
+      sourceId: json['sourceId'] as int?,
       nodeId: json['nodeId'] as String?,
       snippet: json['snippet'] as String?,
       sourceUrl: json['sourceUrl'] as String?,
@@ -152,6 +160,7 @@ class Citation {
   Map<String, dynamic> toJson() => {
     'index': index,
     'title': title,
+    'sourceId': sourceId,
     'nodeId': nodeId,
     'snippet': snippet,
     'sourceUrl': sourceUrl,

@@ -137,6 +137,23 @@ function formatWithSourceId(type, id, obj, contentField = 'content') {
   return obj;
 }
 
+function formatToPT(isoStr) {
+  if (!isoStr) return null;
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return null;
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZoneName: 'short'
+  });
+}
+
 async function globalCanvasFetch(token, endpoint, params = {}, options = {}) {
   const url = new URL(`${CANVAS_BASE}${endpoint}`);
   if (!options.method || options.method === 'GET') {
@@ -455,10 +472,10 @@ const TOOLS = [
   },
   {
     name: 'get_files',
-    description: 'Get a catalog list of files for a course (IDs, names, sizes).',
+    description: 'Get a catalog list of files for a course (IDs, names, sizes). Files listed here receive numeric sourceIds and can be read in full (PDF, PPTX, DOCX, XLSX, etc.) with line numbers by calling read(sourceId).',
     inputSchema: {
       type: 'object',
-      properties: { courseId: { type: 'string' } },
+      properties: { courseId: { type: 'string', description: 'Course ID (numeric string)' } },
       required: ['courseId'],
     },
   },
@@ -858,6 +875,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             id: x.id,
             name: x.name,
             due_at: x.due_at,
+            due_at_pt: formatToPT(x.due_at),
             points_possible: x.points_possible,
             submission_types: x.submission_types,
             has_submitted: x.has_submitted_submissions
@@ -924,6 +942,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             id: x.id,
             title: x.title,
             due_at: x.due_at,
+            due_at_pt: formatToPT(x.due_at),
             time_limit: x.time_limit,
             points_possible: x.points_possible,
             question_count: x.question_count,
@@ -951,6 +970,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             id: x.id,
             title: x.title,
             posted_at: x.posted_at,
+            posted_at_pt: formatToPT(x.posted_at),
             author_name: x.author ? x.author.display_name : 'Unknown',
             read_state: x.read_state,
             summary: x.message ? (typeof x.message === 'string' && x.message.length > 150 ? x.message.slice(0, 150) + '...' : x.message) : ''
@@ -1658,6 +1678,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         await validateItem(userAssignmentCache, cacheKey, () => canvasFetch(`/courses/${args.courseId}/assignments`, { 'order_by': 'due_at' }), args.assignmentId, 'Assignment', args.courseId);
         
         const data = await canvasFetch(`/courses/${args.courseId}/assignments/${args.assignmentId}`, { 'include[]': ['rubric', 'submission'] });
+        if (data) {
+          if (data.due_at) data.due_at_pt = formatToPT(data.due_at);
+          if (data.lock_at) data.lock_at_pt = formatToPT(data.lock_at);
+          if (data.unlock_at) data.unlock_at_pt = formatToPT(data.unlock_at);
+        }
         return ok(formatWithSourceId('assignment', args.assignmentId, data, 'description'));
       }
 
@@ -1688,6 +1713,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const fileInfo = await canvasFetch(`/courses/${args.courseId}/files/${args.fileId}`);
           fileUrl = fileInfo.url;
           displayName = fileInfo.display_name;
+        } else if (args.fileId) {
+          const fileInfo = await canvasFetch(`/files/${args.fileId}`);
+          fileUrl = fileInfo.url;
+          displayName = fileInfo.display_name;
         }
         
         if (!fileUrl) return err('Must provide either (courseId AND fileId) OR fileUrl');
@@ -1710,7 +1739,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const tempPath = join(tmpdir(), `canvas_file_${fileIdStr}_${Date.now()}_${safeName}`);
           await writeFile(tempPath, Buffer.from(buffer));
           
+          if (args.pagesMode === true || args.mode === 'pages') {
+            const { parseDocumentToPagesMarkdown } = await import('./doc_parser.js');
+            const markdown = await parseDocumentToPagesMarkdown(tempPath, displayName);
+            try {
+              const { unlink } = await import('fs/promises');
+              await unlink(tempPath);
+            } catch (_) {}
+            return ok({ title: displayName, content: markdown, fileId: fileIdStr });
+          }
+
           const markdown = await parseDocumentToMarkdown(tempPath, displayName);
+          try {
+            const { unlink } = await import('fs/promises');
+            await unlink(tempPath);
+          } catch (_) {}
           return ok(formatWithSourceId('file', fileIdStr, { title: displayName, content: markdown }, 'content'));
         } catch (e) {
           return err(`Failed to read file content: ${e.message}`);

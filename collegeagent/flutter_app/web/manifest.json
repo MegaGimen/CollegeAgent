@@ -1,6 +1,6 @@
 {
-    "name": "CollegeAgent",
-    "short_name": "CollegeAgent",
+    "name": "ICE Agent",
+    "short_name": "ICE Agent",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -50,9 +50,27 @@ class SessionProvider extends ChangeNotifier {
     }
   }
 
-  Future<SessionModel> createSession(String userId) async {
-    final session = await api.createSession(userId);
-    session.title = 'New Chat';
+  Future<SessionModel> createSession(
+    String userId, {
+    String mode = 'regular',
+    String? courseId,
+    String? courseName,
+    List<String>? fileIds,
+    String? title,
+  }) async {
+    final session = await api.createSession(
+      userId,
+      mode: mode,
+      courseId: courseId,
+      courseName: courseName,
+      fileIds: fileIds,
+      title: title,
+    );
+    if (title != null && title.isNotEmpty) {
+      session.title = title;
+    } else if (mode != 'teaching') {
+      session.title = 'New Chat';
+    }
     await localDb.upsertSession(session);
     _sessions = await localDb.getSessions(userId);
     notifyListeners();

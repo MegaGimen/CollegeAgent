@@ -9,6 +9,10 @@
     "networker-mcp": {
       "command": "/root/.nvm/versions/node/v24.12.0/bin/node",
       "args": ["/home/collegeagent/networker/MCP/server.js"]
+    },
+    "luma-mcp": {
+      "command": "/root/.nvm/versions/node/v24.12.0/bin/node",
+      "args": ["/home/collegeagent/luma/mcp_server.mjs"]
     }
   }
 }

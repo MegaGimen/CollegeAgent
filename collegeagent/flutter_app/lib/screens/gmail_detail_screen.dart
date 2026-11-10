@@ -89,6 +89,7 @@ class _GmailDetailScreenState extends State<GmailDetailScreen> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_message == null) return const Center(child: Text('Failed to load message.'));
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final inVault = _message!['inVault'] == true;
     final content = _message!['content'] ?? '';
     final rawHtml = _message!['html'] ?? '';
@@ -102,7 +103,11 @@ class _GmailDetailScreenState extends State<GmailDetailScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.email, color: Color(0xFF6C63FF), size: 24),
+              Icon(
+                Icons.email,
+                color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0C132C),
+                size: 24,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -110,59 +115,139 @@ class _GmailDetailScreenState extends State<GmailDetailScreen> {
                   children: [
                     Text(
                       _message!['subject'] ?? widget.subject,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'From: ${_message!['from']}',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                      ),
                     ),
                     Text(
                       'Date: ${_message!['date']}',
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      style: TextStyle(
+                        color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-          const Divider(height: 32),
+          Divider(height: 32, color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300),
           if (inVault && content.isNotEmpty) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: isDark ? const Color(0xFF01385F) : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade200,
+                ),
               ),
               child: SelectionArea(
                 child: MarkdownBody(
                   data: content,
-                  onTapLink: (text, href, title) {
-                    if (href != null) {
-                      launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication);
+                  onTapLink: (text, href, title) async {
+                    if (href == null || href.trim().isEmpty) return;
+                    try {
+                      String urlStr = href.trim();
+                      if (!urlStr.startsWith('http://') &&
+                          !urlStr.startsWith('https://') &&
+                          !urlStr.startsWith('mailto:')) {
+                        urlStr = 'https://$urlStr';
+                      }
+                      final uri = Uri.parse(urlStr);
+                      await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                        webOnlyWindowName: '_blank',
+                      );
+                    } catch (e) {
+                      debugPrint('Failed to open URL $href: $e');
                     }
                   },
+                  styleSheet: MarkdownStyleSheet(
+                    p: TextStyle(
+                      color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                      fontSize: 14,
+                      height: 1.6,
+                    ),
+                    h1: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    h2: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    h3: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    strong: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    code: TextStyle(
+                      backgroundColor: isDark ? const Color(0xFF0C132C) : Colors.grey.shade200,
+                      color: isDark ? const Color(0xFF93C5FD) : Colors.black87,
+                      fontFamily: 'monospace',
+                    ),
+                    tableColumnWidth: const IntrinsicColumnWidth(),
+                    tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                    tableBorder: TableBorder.all(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    tableHead: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    tableBody: TextStyle(
+                      color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                    ),
+                  ),
                 ),
               ),
             ),
           ] else ...[
             HtmlWidget(
               rawHtml,
-              textStyle: const TextStyle(fontSize: 14, height: 1.5),
+              textStyle: TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+              ),
             ),
           ],
           if (outboundLinks.isNotEmpty) ...[
             const SizedBox(height: 28),
-            const Divider(),
+            Divider(color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300),
             const SizedBox(height: 12),
             Row(
               children: [
-                const Icon(Icons.hub_outlined, size: 20, color: Color(0xFF6C63FF)),
+                Icon(
+                  Icons.hub_outlined,
+                  size: 20,
+                  color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0C132C),
+                ),
                 const SizedBox(width: 8),
                 Text(
                   '1-Hop 关联外链节点 (${outboundLinks.length})',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
                 ),
               ],
             ),
@@ -179,35 +264,47 @@ class _GmailDetailScreenState extends State<GmailDetailScreen> {
 
                 return Card(
                   elevation: 0,
-                  color: Colors.blue.shade50.withOpacity(0.5),
+                  color: isDark ? const Color(0xFF01385F) : Colors.blue.shade50.withOpacity(0.5),
                   margin: const EdgeInsets.only(bottom: 8),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.blue.shade100),
+                    side: BorderSide(
+                      color: isDark ? const Color(0xFF1E4E79) : Colors.blue.shade100,
+                    ),
                   ),
                   child: ListTile(
                     dense: true,
-                    leading: const Icon(Icons.link, color: Colors.blue, size: 20),
+                    leading: Icon(
+                      Icons.link,
+                      color: isDark ? const Color(0xFF38BDF8) : Colors.blue,
+                      size: 20,
+                    ),
                     title: Text(
                       title,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           url,
-                          style: TextStyle(color: Colors.blue.shade800, fontSize: 11),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isDark ? const Color(0xFF38BDF8) : Colors.blue.shade800,
+                            fontSize: 11,
+                          ),
                         ),
                         if (summary.isNotEmpty) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 2),
                           Text(
                             summary,
-                            style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade700,
+                            ),
                           ),
                         ],
                       ],

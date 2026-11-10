@@ -5,6 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:markdown/markdown.dart' as md;
+import 'package:url_launcher/url_launcher.dart';
 import '../models/message.dart';
 import '../screens/knowledge_graph_screen.dart';
 
@@ -16,6 +17,26 @@ class CitationBottomSheet {
         .split('\n')
         .map((l) => l.replaceFirst(RegExp(r'^\s*\d+\|'), ''))
         .join('\n');
+  }
+
+  static Future<void> handleLink(String? href) async {
+    if (href == null || href.trim().isEmpty) return;
+    try {
+      String urlStr = href.trim();
+      if (!urlStr.startsWith('http://') &&
+          !urlStr.startsWith('https://') &&
+          !urlStr.startsWith('mailto:')) {
+        urlStr = 'https://$urlStr';
+      }
+      final uri = Uri.parse(urlStr);
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+        webOnlyWindowName: '_blank',
+      );
+    } catch (e) {
+      debugPrint('Failed to open URL $href: $e');
+    }
   }
 
   static void show(BuildContext context, Citation citation) {
@@ -128,6 +149,8 @@ class CitationBottomSheet {
                               child: SelectionArea(
                                 child: MarkdownBody(
                                   data: _stripLineNumbers(citation.snippet!),
+                                  onTapLink: (text, href, title) =>
+                                      CitationBottomSheet.handleLink(href),
                                   styleSheet: MarkdownStyleSheet(
                                   p: const TextStyle(
                                       fontSize: 13, height: 1.6),
@@ -152,11 +175,18 @@ class CitationBottomSheet {
                                           width: 3),
                                     ),
                                   ),
+                                  tableColumnWidth: const IntrinsicColumnWidth(),
+                                  tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                                  tableBorder: TableBorder.all(
+                                    color: Colors.grey.shade300,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
-                          ],
+                        ],
                           // View page relationship button
                           if (citation.nodeId != null) ...[
                             const SizedBox(height: 12),
@@ -426,6 +456,8 @@ class _LoadFullContentButtonState extends State<_LoadFullContentButton> {
             child: SelectionArea(
               child: MarkdownBody(
                 data: _fullContent!,
+                onTapLink: (text, href, title) =>
+                    CitationBottomSheet.handleLink(href),
                 styleSheet: MarkdownStyleSheet(
                 p: const TextStyle(fontSize: 13, height: 1.5),
                 h1: const TextStyle(
@@ -444,6 +476,13 @@ class _LoadFullContentButtonState extends State<_LoadFullContentButton> {
                     left: BorderSide(
                         color: Colors.grey.shade400, width: 3),
                   ),
+                ),
+                tableColumnWidth: const IntrinsicColumnWidth(),
+                tableCellsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                tablePadding: const EdgeInsets.symmetric(vertical: 8),
+                tableBorder: TableBorder.all(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(4),
                 ),
               ),
             ),
@@ -550,7 +589,7 @@ class CitationSyntax extends md.InlineSyntax {
   int _counter = 0;
 
   CitationSyntax()
-      : super(r'\[Source:\s*[^\]]+\]|\[\d+(?:\s*,\s*\d+(?:\s*[\-,]\s*\d+)?)?\]|\[\d+(?:[,\-]\s*\d+)*\]');
+      : super(r'\[Source:\s*[^\]]+\]|\[\s*\d+[^\]]*\]');
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -597,7 +636,7 @@ class CitationBuilder extends MarkdownElementBuilder {
 
     if (citation == null && parsedSourceId != null) {
       try {
-        citation = citations.firstWhere((c) => c.index == parsedSourceId);
+        citation = citations.firstWhere((c) => c.sourceId == parsedSourceId);
       } catch (_) {}
     }
 

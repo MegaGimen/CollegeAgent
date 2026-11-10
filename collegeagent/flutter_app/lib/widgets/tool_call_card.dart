@@ -97,13 +97,17 @@ class _ToolCallCardState extends State<ToolCallCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final tc = widget.toolCall;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFFEDE7F6),
+        color: isDark ? const Color(0xFF081226) : const Color(0xFFEDE7F6),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD1C4E9)),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E4E79) : const Color(0xFFD1C4E9),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -123,15 +127,18 @@ class _ToolCallCardState extends State<ToolCallCard> {
                       child: CircularProgressIndicator(strokeWidth: 1.5),
                     )
                   else
-                    const Icon(Icons.check_circle,
-                        size: 14, color: Color(0xFF6C63FF)),
+                    Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0C132C),
+                    ),
                   const SizedBox(width: 6),
                   Text(
                     tc.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF4A148C),
+                      color: isDark ? const Color(0xFF93C5FD) : const Color(0xFF4A148C),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -139,7 +146,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                     child: Text(
                       _summarizeArgs(tc.args),
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600),
+                        fontSize: 11,
+                        color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade600,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -149,8 +158,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                           horizontal: 5, vertical: 1),
                       margin: const EdgeInsets.only(right: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF6C63FF),
+                        color: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
                         borderRadius: BorderRadius.circular(10),
+                        border: isDark ? Border.all(color: const Color(0xFF1E4E79)) : null,
                       ),
                       child: Text(
                         '${tc.graphNodes.length} nodes',
@@ -164,7 +174,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: Colors.grey.shade500,
+                    color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500,
                   ),
                 ],
               ),
@@ -172,7 +182,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
           ),
           // Expanded details
           if (_expanded) ...[
-            const Divider(height: 1),
+            Divider(height: 1, color: isDark ? const Color(0xFF1E4E79) : Colors.grey.shade300),
             Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
@@ -180,48 +190,62 @@ class _ToolCallCardState extends State<ToolCallCard> {
                 children: [
                   // Knowledge graph visualization
                   if (tc.graphNodes.isNotEmpty) ...[
-                    _buildGraphVisualization(tc.graphNodes),
+                    _buildGraphVisualization(tc.graphNodes, isDark),
                     const SizedBox(height: 8),
                   ],
                   // Arguments
-                  const Text('Arguments',
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF7B1FA2))),
+                  Text(
+                    'Arguments',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF7B1FA2),
+                    ),
+                  ),
                   const SizedBox(height: 2),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: isDark ? const Color(0xFF01385F) : Colors.white.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(4),
+                      border: isDark ? Border.all(color: const Color(0xFF1E4E79)) : null,
                     ),
                     child: SelectableText(
                       _formatJson(tc.args),
-                      style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 11),
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                      ),
                     ),
                   ),
                   if (tc.result != null) ...[
                     const SizedBox(height: 6),
-                    const Text('Result',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF7B1FA2))),
+                    Text(
+                      'Result',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF7B1FA2),
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.6),
+                        color: isDark ? const Color(0xFF01385F) : Colors.white.withValues(alpha: 0.6),
                         borderRadius: BorderRadius.circular(4),
+                        border: isDark ? Border.all(color: const Color(0xFF1E4E79)) : null,
                       ),
                       child: SelectableText(
                         _formatResult(tc.result!),
-                        style: const TextStyle(
-                            fontFamily: 'monospace', fontSize: 11),
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                          color: isDark ? const Color(0xFFF1F5F9) : Colors.black87,
+                        ),
                       ),
                     ),
                   ],
@@ -235,42 +259,55 @@ class _ToolCallCardState extends State<ToolCallCard> {
   }
 
   /// Build a visual knowledge graph showing crawled nodes and their connections.
-  Widget _buildGraphVisualization(List<GraphNode> nodes) {
+  Widget _buildGraphVisualization(List<GraphNode> nodes, bool isDark) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            const Color(0xFF6C63FF).withValues(alpha: 0.08),
-            const Color(0xFFB39DDB).withValues(alpha: 0.08),
-          ],
+          colors: isDark
+              ? [
+                  const Color(0xFF01385F),
+                  const Color(0xFF081226),
+                ]
+              : [
+                  const Color(0xFF0C132C).withValues(alpha: 0.08),
+                  const Color(0xFFB39DDB).withValues(alpha: 0.08),
+                ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD1C4E9)),
+        border: Border.all(
+          color: isDark ? const Color(0xFF1E4E79) : const Color(0xFFD1C4E9),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.travel_explore,
-                  size: 14, color: Color(0xFF6C63FF)),
+              Icon(
+                Icons.travel_explore,
+                size: 14,
+                color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0C132C),
+              ),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 'Knowledge Graph Crawl',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF4A148C),
+                  color: isDark ? Colors.white : const Color(0xFF4A148C),
                 ),
               ),
               const Spacer(),
               Text(
                 '${nodes.length} page${nodes.length == 1 ? '' : 's'} visited',
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade600,
+                ),
               ),
             ],
           ),
@@ -278,14 +315,14 @@ class _ToolCallCardState extends State<ToolCallCard> {
           ...nodes.asMap().entries.map((entry) {
             final i = entry.key;
             final node = entry.value;
-            return _buildGraphNodeWidget(node, i, nodes.length);
+            return _buildGraphNodeWidget(node, i, nodes.length, isDark);
           }),
         ],
       ),
     );
   }
 
-  Widget _buildGraphNodeWidget(GraphNode node, int index, int total) {
+  Widget _buildGraphNodeWidget(GraphNode node, int index, int total, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -293,12 +330,14 @@ class _ToolCallCardState extends State<ToolCallCard> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: isDark ? const Color(0xFF081226) : Colors.white,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFD1C4E9)),
+            border: Border.all(
+              color: isDark ? const Color(0xFF1E4E79) : const Color(0xFFD1C4E9),
+            ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6C63FF).withValues(alpha: 0.08),
+                color: (isDark ? Colors.black : const Color(0xFF0C132C)).withValues(alpha: 0.08),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -311,9 +350,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
               Container(
                 width: 20,
                 height: 20,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF6C63FF),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF01385F) : const Color(0xFF0C132C),
                   shape: BoxShape.circle,
+                  border: isDark ? Border.all(color: const Color(0xFF1E4E79)) : null,
                 ),
                 child: Center(
                   child: Text(
@@ -334,10 +374,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   children: [
                     Text(
                       node.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF311B92),
+                        color: isDark ? Colors.white : const Color(0xFF311B92),
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -348,7 +388,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                         node.sourceUrl!,
                         style: TextStyle(
                           fontSize: 9,
-                          color: Colors.grey.shade500,
+                          color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -365,21 +405,22 @@ class _ToolCallCardState extends State<ToolCallCard> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 5, vertical: 1),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEDE7F6),
+                              color: isDark ? const Color(0xFF01385F) : const Color(0xFFEDE7F6),
                               borderRadius: BorderRadius.circular(8),
-                              border:
-                                  Border.all(color: const Color(0xFFD1C4E9)),
+                              border: Border.all(
+                                color: isDark ? const Color(0xFF1E4E79) : const Color(0xFFD1C4E9),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  link.nodeId != null
+                                  link.sourceId != null
                                       ? Icons.link
                                       : Icons.link_off,
                                   size: 9,
-                                  color: link.nodeId != null
-                                      ? const Color(0xFF6C63FF)
+                                  color: link.sourceId != null
+                                      ? (isDark ? const Color(0xFF38BDF8) : const Color(0xFF0C132C))
                                       : Colors.grey.shade400,
                                 ),
                                 const SizedBox(width: 2),
@@ -389,9 +430,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                                       : link.title,
                                   style: TextStyle(
                                     fontSize: 9,
-                                    color: link.nodeId != null
-                                        ? const Color(0xFF4A148C)
-                                        : Colors.grey.shade500,
+                                    color: link.sourceId != null
+                                        ? (isDark ? const Color(0xFF93C5FD) : const Color(0xFF4A148C))
+                                        : (isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500),
                                   ),
                                 ),
                               ],
@@ -405,7 +446,9 @@ class _ToolCallCardState extends State<ToolCallCard> {
                           child: Text(
                             '+${node.outboundLinks.length - 5} more links',
                             style: TextStyle(
-                                fontSize: 9, color: Colors.grey.shade500),
+                              fontSize: 9,
+                              color: isDark ? const Color(0xFF8DA4C4) : Colors.grey.shade500,
+                            ),
                           ),
                         ),
                     ],
@@ -422,7 +465,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
             child: Container(
               width: 2,
               height: 12,
-              color: const Color(0xFFD1C4E9),
+              color: isDark ? const Color(0xFF1E4E79) : const Color(0xFFD1C4E9),
             ),
           ),
       ],
