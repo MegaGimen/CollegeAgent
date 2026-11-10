@@ -33,7 +33,7 @@ Ask it about a deadline, a syllabus, an email from a professor, a campus policy 
 
 `networker/` turns a website into a graph. A queue-driven Playwright crawler walks a site page by page. Each page becomes a Markdown file, and each link between pages becomes a `[[wikilink]]`, so a finished crawl is a folder that opens directly as an Obsidian vault.
 
-- Every crawl is an isolated background task that can be watched, aborted and resumed after a restart.
+- Every crawl is an isolated background task that can be watched and aborted on its own.
 - Links are resolved to absolute URLs, and a pending link is labelled with its anchor text until the page itself has been visited.
 - A ban list keeps the crawler out of login pages, feeds and upload folders.
 - A dashboard streams logs over SSE and draws the finished graph.
