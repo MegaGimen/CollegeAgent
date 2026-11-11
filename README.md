@@ -89,6 +89,10 @@ Pages pulled in one hop out from a course page or an email are scraped through a
 - Sessions can be forked for sub-agents.
 - The Flutter app shows the chat with tool calls and citations, the knowledge graph, the personal vault, Canvas courses, Gmail and Luma events.
 
+### Review mode
+
+Pick a Canvas course and tick the files to review. The session is bound to those files and stays on them: it explains concepts, summarises the key points and quizzes you, and names the file and page each point comes from.
+
 ### Luma events
 
 `luma/` keeps a rolling three-month vault of public events in San Francisco, Berkeley and Shanghai, synced hourly, with semantic search over it and a live API mode.
